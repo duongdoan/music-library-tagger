@@ -9,30 +9,7 @@ if len(sys.argv) != 2:
 else:
     root = sys.argv[1]
 
-ALBUM_NAME = "Bolero Tuyển Chọn I"
-ALBUM_ARTIST = "Various"
-GENRE = "Nhạc vàng"
-
-def fixAlbumTags(dir, albumName, albumArtist, genre):
-    
-    for dirname, dirs, files in os.walk(dir):
-        #print(dirname)     # relative path (from cwd) to the directory being processed
-        #print(dirs)       # list of subdirectories in the currently processed directory
-        #print(files)       # list of files in the currently processed directory
-
-        for filename in files:
-            try:
-              f = music_tag.load_file(os.path.join(dirname, filename))
-              f['album'] = albumName
-              f['albumartist'] = albumArtist
-              f['genre'] = genre
-              f.save()
-              print(f)  
-            except:
-              pass
-            
-
-def checkAndReplaceTagName(dir, tag ,oldvalue, newValue, replace):
+def checkAndReplaceTagName(dir, tag, oldvalue, newValue, replace):
   print('Preparing')
   totalFile = utils.countFiles(dir)
   print('Total number of files: ' + str(totalFile))
@@ -64,7 +41,12 @@ def checkAndReplaceTagName(dir, tag ,oldvalue, newValue, replace):
   print ('Finished replacing, replaced ' + str(countReplaced))
 
 
-checkAndReplaceTagName('/Volumes/DD2/Music3/Classical/Violin', 'album', '16 / ', '', True)
+dir = "/Volumes/Music/Music1/V-Bolero/Best Compilation"
+tag = "album"
+oldvalue = "16 / "
+newValue = ""
+doReplace = True
 
-#fixAlbumTags('/Volumes/DD2/Music2', "Bolero Tuyển Chọn I", "Various", "Nhạc vàng")
+checkAndReplaceTagName(dir, tag, oldvalue, newValue, doReplace)
+
 print('DONE')

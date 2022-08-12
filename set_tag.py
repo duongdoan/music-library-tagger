@@ -25,6 +25,10 @@ def setTags(dir, album, albumArtist, genre):
               print(f)  
             except:
               pass
-            
-setTags("/Volumes/Music/Music1/V-Bolero/Best Compilation", "Bolero Tuyển Chọn I", "Various", "Nhạc vàng")
+
+dir = "/Volumes/Music/Music1/V-Bolero/Best Compilation"
+album = "Bolero Tuyển Chọn I"
+albumArtist = "Various"
+genre = "Nhạc vàng"            
+setTags(dir, album, albumArtist, genre)
 print('DONE')
