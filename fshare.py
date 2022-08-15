@@ -42,7 +42,8 @@ class FSAPI:
         self.token = login_data["token"]
         session_id = login_data["session_id"]
 
-        self.s.cookies.set("session_id", session_id)
+        #self.s.cookies.set("session_id", session_id)
+        self.s.headers["Cookie"] = "session_id=" + session_id
 
         return login_data
 
@@ -77,18 +78,17 @@ class FSAPI:
 
     def get_folder_urls(self, url, page=0, limit=60):
         url = self.check_valid(url)
+
         r = self.s.post(
             "https://api.fshare.vn/api/fileops/getFolderList",
-            data={
+            data=json.dumps({
                 "token": self.token,
                 "url": url,
                 "dirOnly": 0,
                 "pageIndex": page,
                 "limit": limit,
-            },
+            }),
         )
-        print(r)
-        print(self.token)
         data = r.json()
         return data
 
