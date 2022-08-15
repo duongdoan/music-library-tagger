@@ -1,7 +1,7 @@
 import os
 import sys
 import music_tag
-import utils
+import lib.utils as utils
 
 if len(sys.argv) != 2:
     print("Usage: {} PATH_TO_DIRECTORY".format(sys.argv[0]))

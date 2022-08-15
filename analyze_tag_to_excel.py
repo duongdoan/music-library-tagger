@@ -1,8 +1,8 @@
 import os
 import music_tag
-import utils
+import lib.utils as utils
 import xlsxwriter
-from gsheet_client import GoogleSheetClient
+from lib.gsheet_client import GoogleSheetClient
 
 header = ["Directory", "File", "Album", "Album Artist", "Title",
           "Artist", "Album OK", "Album Artist OK", "Title OK", "Artist OK"]

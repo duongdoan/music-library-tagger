@@ -1,8 +1,12 @@
-from fshare import FSAPI
+from lib.fshare_client import FSAPI
+import json
+
+f = open('config/fshare.json')
+fshareConfig = json.load(f)
 
 URL = 'https://www.fshare.vn/folder/CV6XVAKRRD7M?token=1660548247'
 
-bot = FSAPI(email="duongndoan@yahoo.com.au", password="1tr2s3v4b")
+bot = FSAPI(email=fshareConfig['email'], password=fshareConfig['password'])
 login = bot.login()
 folder = bot.get_folder_urls(URL)
 print(folder)
