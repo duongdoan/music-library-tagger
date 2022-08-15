@@ -9,10 +9,12 @@ if len(sys.argv) != 2:
 else:
     root = sys.argv[1]
 
-def checkAndReplaceTagName(dir, tag, oldvalue, newValue, replace):
-  print('Preparing')
-  totalFile = utils.countFiles(dir)
-  print('Total number of files: ' + str(totalFile))
+def checkAndReplaceTagName(dir, tag, oldvalue, newValue, replace, prepare):
+  totalFile = 0
+  if prepare:
+    print('Preparing')
+    totalFile = utils.countFiles(dir)
+    print('Total number of files: ' + str(totalFile))
   countProgress = 0
   countFound = 0
   countReplaced = 0
@@ -36,17 +38,17 @@ def checkAndReplaceTagName(dir, tag, oldvalue, newValue, replace):
 
             countProgress = countProgress + 1
             if (countProgress % 100 == 0):
-              print('Processed ' + str(countProgress) + '/' + str(totalFile) )
+              print('Processed ' + str(countProgress) + '/' + str(totalFile) + ' - Replaced ' + str(countReplaced))
   print ('Finished checking, found ' + str(countFound))
   print ('Finished replacing, replaced ' + str(countReplaced))
 
 
-dir = "/Volumes/Music/Music1/V-Bolero/Best Compilation"
+dir = "/Volumes/Music/Music2"
 tag = "album"
 oldvalue = "16 / "
 newValue = ""
 doReplace = True
 
-checkAndReplaceTagName(dir, tag, oldvalue, newValue, doReplace)
+checkAndReplaceTagName(dir, tag, oldvalue, newValue, doReplace, prepare = False)
 
 print('DONE')
