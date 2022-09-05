@@ -3,12 +3,8 @@ import music_tag
 import lib.utils as utils
 from lib.gsheet_client import GoogleSheetClient
 
-header = ["Directory", "File", "Album", "Album Artist", "Title",
-          "Artist", "Album OK", "Album Artist OK", "Title OK", "Artist OK"]
-
-def write_row(worksheet, row, data):
-    for idx, x in enumerate(data):
-        worksheet.write(row, idx, str(x))
+header = ["File", "Album", "Album Artist", "Title",
+          "Artist", "Composer", "Genre", "Directory", "Album OK", "Album Artist OK", "Title OK", "Artist OK"]
 
 def analyze(dir, googleSheetKey, prepare):
     totalFile = 0
@@ -18,7 +14,7 @@ def analyze(dir, googleSheetKey, prepare):
         print('Total number of files: ' + str(totalFile))
     countProgress = 0
 
-    googleSheet = GoogleSheetClient(key = googleSheetKey, sheet = 0)
+    googleSheet = GoogleSheetClient(key = googleSheetKey, sheetName = dir)
     googleSheet.insert_row(header, 1)
     row = 2
     rowsToAdd = []
@@ -27,7 +23,7 @@ def analyze(dir, googleSheetKey, prepare):
             try:
                 fullPath = os.path.join(dirname, filename)
                 f = music_tag.load_file(fullPath)
-                data = [dirname, filename, str(f['album']), str(f['albumartist']), str(f['title']), str(f['artist'])]
+                data = [filename, str(f['album']), str(f['albumartist']), str(f['title']), str(f['artist']), str(f['composer']), str(f['genre']), dirname]
                 rowsToAdd.append(data)
             except Exception as e:
                 pass
@@ -44,9 +40,9 @@ def analyze(dir, googleSheetKey, prepare):
     print('Finished analyzing, processed ' + str(countProgress))
 
 
-dir = "/Volumes/Temp"
+dir = "/Volumes/Music"
 
 
-analyze(dir, googleSheetKey='1qlCRJ5wuAf7q5J37gwJa0MvMx0Vpgrm3lqzAD_VwyE4', prepare=True)
+analyze(dir, googleSheetKey='1qlCRJ5wuAf7q5J37gwJa0MvMx0Vpgrm3lqzAD_VwyE4', prepare=False)
 
 print('DONE')

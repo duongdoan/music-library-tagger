@@ -5,14 +5,14 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 class GoogleSheetClient:
   
-  def __init__(self, key, sheet):
+  def __init__(self, key, sheetName):
     scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
 
     # add credentials to the account
-    creds = ServiceAccountCredentials.from_json_keyfile_name('mymedia-359312-797dfbd3ff60.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name('config/mymedia-359312-797dfbd3ff60.json', scope)
     self.client = gspread.authorize(creds)
     self.sheet = self.client.open_by_key(key)
-    self.sheet_instance = self.sheet.get_worksheet(index = sheet)
+    self.sheet_instance = self.sheet.add_worksheet(title=sheetName, rows = 0, cols=20)
 
   def insert_row(self, data, row):
     self.sheet_instance.insert_row(data, row)
