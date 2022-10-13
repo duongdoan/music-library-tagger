@@ -1,5 +1,6 @@
 gspread
 xlsxwriter
+oauth2client
 
 
 

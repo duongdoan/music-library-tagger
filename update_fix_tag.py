@@ -17,8 +17,8 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
     changes = []
 
     for idx, meta in enumerate(originals):
-        if (news[idx]["Album"] != "" and (originals[idx]["Album"] != news[idx]["Album"] or originals[idx]["Album Artist"] != news[idx]["Album Artist"]
-        or originals[idx]["Title"] != news[idx]["Title"] or originals[idx]["Artist"] != news[idx]["Artist"])):
+        if (news[idx]["Album"] != "" and originals[idx]["File"] == news[idx]["File"] and (originals[idx]["Album"] != news[idx]["Album"] or originals[idx]["Album Artist"] != news[idx]["Album Artist"]
+        or originals[idx]["Title"] != news[idx]["Title"] or originals[idx]["Artist"] != news[idx]["Artist"] or originals[idx]["Composer"] != news[idx]["Composer"])):
             changes.append(news[idx])
 
     print (len(originals))
@@ -38,7 +38,7 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
                     f['title'] = fileMeta["Title"]
                     f['artist'] = fileMeta["Artist"]
                     f['genre'] = fileMeta["Genre"]
-                    #f['composer'] = fileMeta["Composer"]
+                    f['composer'] = fileMeta["Composer"]
                     f.save()
                 except:
                     print("Error update file")
@@ -58,7 +58,7 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
         for idx, fileMeta in enumerate(changes):
             if fileMeta["Directory"] not in folders:
                 folder = fileMeta["Directory"]
-                newFolder = folder.replace("/Volumes/Temp", "/Volumes/Temp/Good")
+                newFolder = folder.replace(current, current + "/Good")
                 folders.append(folder)
                 newFolders.append(newFolder)
                 try:
@@ -76,8 +76,8 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
         print (countMoved)
 
 dir = "/Volumes/Music"
-current = "/Volumes/Temp"
-changed = "/Volumes/Temp-Fixed"
+current = "/Volumes/DD2/Classified"
+changed = "/Volumes/DD2/Classified-Fixed"
 willUpdate = False
 willMove = True
 
