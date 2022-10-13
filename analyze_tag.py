@@ -1,7 +1,7 @@
 import os
 import music_tag
 import lib.utils as utils
-from lib.gsheet_client import GoogleSheetClient
+from lib.gsheet_client import GoogleSheetWriter
 
 header = ["File", "Album", "Album Artist", "Title",
           "Artist", "Composer", "Genre", "Directory", "Album OK", "Album Artist OK", "Title OK", "Artist OK"]
@@ -14,7 +14,7 @@ def analyze(dir, googleSheetKey, prepare):
         print('Total number of files: ' + str(totalFile))
     countProgress = 0
 
-    googleSheet = GoogleSheetClient(key = googleSheetKey, sheetName = dir)
+    googleSheet = GoogleSheetWriter(key = googleSheetKey, sheetName = dir)
     googleSheet.insert_row(header, 1)
     row = 2
     rowsToAdd = []
@@ -40,7 +40,7 @@ def analyze(dir, googleSheetKey, prepare):
     print('Finished analyzing, processed ' + str(countProgress))
 
 
-dir = "/Volumes/Music"
+dir = "/Volumes/Temp/Music/SoundVision HDtrackscom Presen"
 
 
 analyze(dir, googleSheetKey='1qlCRJ5wuAf7q5J37gwJa0MvMx0Vpgrm3lqzAD_VwyE4', prepare=False)

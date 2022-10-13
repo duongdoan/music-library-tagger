@@ -3,7 +3,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 
-class GoogleSheetClient:
+class GoogleSheetWriter:
   
   def __init__(self, key, sheetName):
     scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
@@ -25,5 +25,20 @@ class GoogleSheetClient:
 
     
 
+class GoogleSheetReader:
+  
+  def __init__(self, key, sheetName):
+    scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
+
+    # add credentials to the account
+    creds = ServiceAccountCredentials.from_json_keyfile_name('config/mymedia-359312-797dfbd3ff60.json', scope)
+    self.client = gspread.authorize(creds)
+    self.sheet = self.client.open_by_key(key)
+    self.sheet_instance = self.sheet.worksheet(title=sheetName)
+
+  def read_all(self):
+    return self.sheet_instance.get_all_records()
+
+    
 #sheet = GoogleSheetClient(key = '1qlCRJ5wuAf7q5J37gwJa0MvMx0Vpgrm3lqzAD_VwyE4', sheetIndex = 0)
 #sheet.insert_row(['1', '2', '3'], 2)
