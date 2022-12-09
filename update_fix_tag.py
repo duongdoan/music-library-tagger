@@ -25,14 +25,16 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
         or originals[idx]["Title"] != news[idx]["Title"] or originals[idx]["Artist"] != news[idx]["Artist"]  or originals[idx]["Composer"] != news[idx]["Composer"] or originals[idx]["Genre"] != news[idx]["Genre"])):
             changes.append(news[idx])
 
+    print ('Preparing')
     print (len(originals))
     print (len(news))
     print (len(changes))
-
+    print ('Replaced: ')
     if (updateTag):
         countReplaced = 0
         skip = 0
         errors = []
+        errorIndex = 0
         for idx, fileMeta in enumerate(changes):
             if countReplaced >= skip:
                 try:
@@ -48,6 +50,7 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
                 except Exception as e:
                     print(fileMeta)
                     print(e)
+                    print('')
                     errorIndex = errorIndex + 1
                     errors.append([fileMeta["File"], fileMeta["Album"], fileMeta["Album Artist"], fileMeta["Title"], fileMeta["Artist"], fileMeta["Composer"], fileMeta["Genre"], fileMeta["Directory"], str(e)])
                     #googleSheetError.insert_rows([fileMeta["File"], fileMeta["Album"], fileMeta["Album Artist"], fileMeta["Title"], fileMeta["Artist"], fileMeta["Composer"], fileMeta["Genre"], fileMeta["Directory"], str(e)], errorIndex)
@@ -55,8 +58,9 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
                     #time.sleep(3)
 
             countReplaced = countReplaced + 1
-            if countReplaced%100 == 0:
-                print (countReplaced)
+            print(' ' + countReplaced, end='\r', flush=True)
+            #if countReplaced%100 == 0:
+                #print (countReplaced)
             
         if (len(errors) > 0):
             googleSheetError.insert_rows(errors, 1)
