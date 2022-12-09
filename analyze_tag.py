@@ -40,7 +40,7 @@ def analyze(dir, googleSheetKey, prepare):
     print('Finished analyzing, processed ' + str(countProgress))
 
 
-dir = '/Volumes/DD2/Classified'
+dir = "/Volumes/Music"
 
 
 analyze(dir, googleSheetKey='1qlCRJ5wuAf7q5J37gwJa0MvMx0Vpgrm3lqzAD_VwyE4', prepare=False)
