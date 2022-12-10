@@ -58,14 +58,14 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
                     #time.sleep(3)
 
             countReplaced = countReplaced + 1
-            print(' ' + countReplaced, end='\r', flush=True)
+            print(' ' + str(countReplaced), end='\r', flush=True)
             #if countReplaced%100 == 0:
                 #print (countReplaced)
             
         if (len(errors) > 0):
             googleSheetError.insert_rows(errors, 1)
 
-        
+        print('')
         print (countReplaced)
     
     if (moveFiles):
@@ -93,8 +93,8 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
         print (countMoved)
 
 dir = "/Volumes/Music"
-current = "/Volumes/Music"
-changed = "/Volumes/Music-Fixed"
+current = "/Volumes/Music-Fixed"
+changed = "/Volumes/Music-Fixed-2"
 willUpdate = True
 willMove = False
 
