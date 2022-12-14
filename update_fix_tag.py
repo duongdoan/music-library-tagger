@@ -48,9 +48,9 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
                     f['composer'] = fileMeta["Composer"]
                     f.save()
                 except Exception as e:
-                    print(fileMeta)
-                    print(e)
-                    print('')
+                    #print(fileMeta)
+                    #print(e)
+                    #print('')
                     errorIndex = errorIndex + 1
                     errors.append([fileMeta["File"], fileMeta["Album"], fileMeta["Album Artist"], fileMeta["Title"], fileMeta["Artist"], fileMeta["Composer"], fileMeta["Genre"], fileMeta["Directory"], str(e)])
                     #googleSheetError.insert_rows([fileMeta["File"], fileMeta["Album"], fileMeta["Album Artist"], fileMeta["Title"], fileMeta["Artist"], fileMeta["Composer"], fileMeta["Genre"], fileMeta["Directory"], str(e)], errorIndex)
