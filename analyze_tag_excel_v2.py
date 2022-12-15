@@ -3,8 +3,8 @@ import music_tag
 import lib.utils as utils
 from lib.excel_client import ExcelSheetWriter
 
-header = ["File", "Album", "Album Artist", "Title",
-          "Artist", "Composer", "Genre", "Directory"]
+header = ["File", "Album", "Album Artist", "Title", "Artist", "Composer", "Genre", "Compilation", "Comment", "Artwork", "Directory"]
+
 
 def analyze(dir, path, prepare):
     totalFile = 0
@@ -23,7 +23,7 @@ def analyze(dir, path, prepare):
             try:
                 fullPath = os.path.join(dirname, filename)
                 f = music_tag.load_file(fullPath)
-                data = [filename, str(f['album']), str(f['albumartist']), str(f['title']), str(f['artist']), str(f['composer']), str(f['genre']), dirname]
+                data = [filename, str(f['album']), str(f['albumartist']), str(f['title']), str(f['artist']), str(f['composer']), str(f['genre']), str(f['compilation']), str(f['comment']), str(f['artwork']), dirname]
                 rowsToAdd.append(data)
             except Exception as e:
                 pass

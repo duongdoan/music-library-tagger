@@ -12,3 +12,5 @@ https://pypi.org/project/music-tag/
 python3 -m pip install -r requirements.txt
 
 python3 -m pip install music_tag
+pip install pysimplegui
+pip install tk
