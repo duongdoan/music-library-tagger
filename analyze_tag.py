@@ -3,7 +3,7 @@ import music_tag
 import lib.utils as utils
 from lib.gsheet_client import GoogleSheetWriter
 
-header = ["File", "Album", "Album Artist", "Title", "Artist", "Composer", "Genre", "Compilation", "Comment", "Artwork", "Directory"]
+header = [ "Dir", "File" ,"Album", "Album Artist", "Title", "Artist", "Composer", "Genre", "Compilation", "Comment", "Artwork", "Directory"]
 
 def analyze(dir, googleSheetKey, prepare):
     totalFile = 0
@@ -12,7 +12,7 @@ def analyze(dir, googleSheetKey, prepare):
         totalFile = utils.countFiles(dir)
         print('Total number of files: ' + str(totalFile))
     countProgress = 0
-
+    print('Analyzing')
     googleSheet = GoogleSheetWriter(key = googleSheetKey, sheetName = dir)
     googleSheet.insert_row(header, 1)
     row = 2
@@ -21,8 +21,9 @@ def analyze(dir, googleSheetKey, prepare):
         for filename in files:
             try:
                 fullPath = os.path.join(dirname, filename)
+                dirOnly = os.path.basename(dirname)
                 f = music_tag.load_file(fullPath)
-                data = [filename, str(f['album']), str(f['albumartist']), str(f['title']), str(f['artist']), str(f['composer']), str(f['genre']), str(f['compilation']), str(f['comment']), str(f['artwork']), dirname]
+                data = [dirOnly, filename, str(f['album']), str(f['albumartist']), str(f['title']), str(f['artist']), str(f['composer']), str(f['genre']), str(f['compilation']), str(f['comment']), str(f['artwork']), dirname]
                 rowsToAdd.append(data)
             except Exception as e:
                 pass
@@ -31,15 +32,15 @@ def analyze(dir, googleSheetKey, prepare):
                 row = row + 100
                 rowsToAdd = []
             countProgress = countProgress + 1
-            if (countProgress % 100 == 0):
-                print('Processed ' + str(countProgress) + '/' + str(totalFile))
+            print(' ' + str(countProgress) + '/' + str(totalFile), end='\r', flush=True)
+            
 
     if (len(rowsToAdd) > 0):
         googleSheet.insert_rows(rowsToAdd, row)
     print('Finished analyzing, processed ' + str(countProgress))
 
 
-dir = "/Volumes/Music"
+dir = "/Volumes/Music/Music4/V-Bolero/TNCD"
 
 
 analyze(dir, googleSheetKey='1qlCRJ5wuAf7q5J37gwJa0MvMx0Vpgrm3lqzAD_VwyE4', prepare=False)

@@ -6,8 +6,7 @@ from lib.gsheet_client import GoogleSheetReader
 from lib.gsheet_client import GoogleSheetWriter
 import time
 
-header = ["File", "Album", "Album Artist", "Title",
-          "Artist", "Composer", "Genre", "Directory", "Album OK", "Album Artist OK", "Title OK", "Artist OK"]
+header = ["Dir", "File" ,"Album", "Album Artist", "Title", "Artist", "Composer", "Genre", "Compilation", "Comment", "Artwork", "Directory"]
 
 def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
     googleSheetOriginal = GoogleSheetReader(key = googleSheetKey, sheetName = sheetCurrent)
@@ -48,19 +47,13 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
                     f['composer'] = fileMeta["Composer"]
                     f.save()
                 except Exception as e:
-                    #print(fileMeta)
-                    #print(e)
-                    #print('')
                     errorIndex = errorIndex + 1
                     errors.append([fileMeta["File"], fileMeta["Album"], fileMeta["Album Artist"], fileMeta["Title"], fileMeta["Artist"], fileMeta["Composer"], fileMeta["Genre"], fileMeta["Directory"], str(e)])
-                    #googleSheetError.insert_rows([fileMeta["File"], fileMeta["Album"], fileMeta["Album Artist"], fileMeta["Title"], fileMeta["Artist"], fileMeta["Composer"], fileMeta["Genre"], fileMeta["Directory"], str(e)], errorIndex)
-                    #Prevent call google too much
-                    #time.sleep(3)
+                    
 
             countReplaced = countReplaced + 1
             print(' ' + str(countReplaced), end='\r', flush=True)
-            #if countReplaced%100 == 0:
-                #print (countReplaced)
+            
             
         if (len(errors) > 0):
             googleSheetError.insert_rows(errors, 1)
@@ -92,9 +85,9 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
 
         print (countMoved)
 
-dir = "/Volumes/Music"
-current = "/Volumes/Music-Fixed"
-changed = "/Volumes/Music-Fixed-2"
+dir = "/Volumes/Temp"
+current = "/Volumes/Music/Music5"
+changed = "/Volumes/Music/Music5-Fixed"
 willUpdate = True
 willMove = False
 
