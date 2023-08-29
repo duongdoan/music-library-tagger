@@ -15,13 +15,14 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
     googleSheetNew = GoogleSheetReader(key = googleSheetKey, sheetName = sheetUpdate)
     news = googleSheetNew.read_all()
 
-    googleSheetError = GoogleSheetWriter(key = googleSheetKey, sheetName = dir + " Errors " + str(time.time()) )
+    googleSheetError = GoogleSheetWriter(key = googleSheetKey, sheetName = sheetCurrent + " Errors " + str(time.time()) )
 
     changes = []
 
     for idx, meta in enumerate(originals):
-        if (news[idx]["Album"] != "" and originals[idx]["File"] == news[idx]["File"] and (originals[idx]["Album"] != news[idx]["Album"] or originals[idx]["Album Artist"] != news[idx]["Album Artist"]
-        or originals[idx]["Title"] != news[idx]["Title"] or originals[idx]["Artist"] != news[idx]["Artist"]  or originals[idx]["Composer"] != news[idx]["Composer"] or originals[idx]["Genre"] != news[idx]["Genre"])):
+        if ( originals[idx]["File"] == news[idx]["File"] and (originals[idx]["Album"] != news[idx]["Album"] or originals[idx]["Album Artist"] != news[idx]["Album Artist"]
+        or originals[idx]["Title"] != news[idx]["Title"] or originals[idx]["Artist"] != news[idx]["Artist"]  or 
+        originals[idx]["Composer"] != news[idx]["Composer"] or originals[idx]["Genre"] != news[idx]["Genre"] or originals[idx]["Comment"] != news[idx]["Comment"])):
             changes.append(news[idx])
 
     print ('Preparing')
@@ -45,6 +46,8 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
                     f['artist'] = fileMeta["Artist"]
                     f['genre'] = fileMeta["Genre"]
                     f['composer'] = fileMeta["Composer"]
+                    #f['compilation'] = fileMeta["Compilation"]
+                    f['comment'] = fileMeta["Comment"]
                     f.save()
                 except Exception as e:
                     errorIndex = errorIndex + 1
@@ -85,9 +88,8 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
 
         print (countMoved)
 
-dir = "/Volumes/Temp"
-current = "/Volumes/Music/Music5"
-changed = "/Volumes/Music/Music5-Fixed"
+current = "/Users/duongdoan/Documents/Music"
+changed = "/Users/duongdoan/Documents/Music-Fixed"
 willUpdate = True
 willMove = False
 
