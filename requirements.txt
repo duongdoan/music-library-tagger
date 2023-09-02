@@ -4,6 +4,8 @@ music_tag
 oauth2client
 Flask==2.1.2
 PyQt6
+requests
+send2trash
 
 # This is a comment, to show how #-prefixed lines are ignored.
 # It is possible to specify requirements as plain names.

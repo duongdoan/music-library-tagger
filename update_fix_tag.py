@@ -88,8 +88,8 @@ def update(googleSheetKey, sheetCurrent, sheetUpdate, updateTag, moveFiles) :
 
         print (countMoved)
 
-current = "/Users/duongdoan/Documents/Music"
-changed = "/Users/duongdoan/Documents/Music-Fixed"
+current = "/Volumes/nas2/Download/Staging"
+changed = "/Volumes/nas2/Download/Staging-Fixed"
 willUpdate = True
 willMove = False
 
