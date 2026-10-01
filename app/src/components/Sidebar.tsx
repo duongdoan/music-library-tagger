@@ -94,9 +94,8 @@ export default function Sidebar({ onAddSource, onHistory }: { onAddSource: () =>
         <h4>Rà soát</h4>
         {store.quickFilters.map((f) => {
           const n = counts.get(f.key) ?? 0;
-          if (f.key !== "all" && n === 0 && quick !== f.key) return null;
           return (
-            <button key={f.key} className={"side-item" + (quick === f.key ? " on" : "")} onClick={() => store.setView({ quick: f.key })}>
+            <button key={f.key} className={"side-item" + (quick === f.key ? " on" : "") + (n === 0 && f.key !== "all" ? " zero" : "")} onClick={() => store.setView({ quick: f.key })}>
               <span className="ind" />{f.label}<span className="cnt">{fmtN(n)}</span>
             </button>
           );

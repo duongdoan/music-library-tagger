@@ -140,3 +140,4 @@ table.diff .num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 .sticky-foot { position: sticky; bottom: -14px; margin: 0 -14px -14px; padding: 10px 14px; background: var(--surface); border-top: 1px solid var(--line); }
 .sticky-foot .btn { width: 100%; justify-content: center; }
+.side-item.zero { opacity: 0.45; }

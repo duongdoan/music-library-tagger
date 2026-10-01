@@ -241,15 +241,15 @@ APP-STAGE-R11, R13.
 ### Quy tắc nghiệp vụ áp dụng
 APP-STAGE-R12, APP-TAG-R4.
 
-## APP-EDIT-RIFFSYNC — Đồng bộ RIFF INFO cho WAV
+## APP-EDIT-RIFFSYNC — Đồng bộ tag lệch (RIFF INFO của WAV, khoá Album Artist)
 
 ### Luồng chính
-- F1. Lọc "WAV: RIFF INFO lệch" (hoặc chọn các file WAV bất kỳ).
-- F2. Chọn "Đồng bộ RIFF INFO". Mỗi file tạo một thay đổi chờ đặc biệt, hiển thị trong Xem trước dạng "RIFF INFO · Artist: «cũ» → «mới»" cho từng trường lệch.
+- F1. Lọc "WAV: RIFF INFO lệch" hoặc "Album Artist lệch giữa các khoá" (hoặc chọn file bất kỳ).
+- F2. Chọn "Đồng bộ tag lệch". Mỗi file lệch tạo một thay đổi chờ đặc biệt. Trong Xem trước, mục này hiện là "Ghi lại RIFF INFO theo ID3" hoặc "Ghi Album Artist vào mọi khoá đang dùng («giá trị»)".
 - F3. Áp dụng như mọi lượt ghi; có nhật ký và hoàn tác.
 
 ### Quy tắc nghiệp vụ áp dụng
-APP-TAG-R10, APP-WRITE-R1..R11, APP-UNDO-R1.
+APP-TAG-R10, APP-TAG-R13, APP-WRITE-R1..R11, APP-UNDO-R1.
 
 ## APP-EDIT-ARTWORK — Ảnh bìa
 

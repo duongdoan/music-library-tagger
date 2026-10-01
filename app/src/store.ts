@@ -2,7 +2,7 @@
 // mirrored here and persisted in SQLite through api.stageSet (APP-STAGE-R5).
 import { useSyncExternalStore } from "react";
 import { api, type Source, type StagedChange, type TrackRow, type StageInput, type ScanProgress } from "./api";
-import { fold, normalize, PLACEHOLDERS, RIFF_SYNC, TEXT_FIELDS, validate } from "./fields";
+import { AA_SYNC, fold, isPseudo, normalize, PLACEHOLDERS, RIFF_SYNC, TEXT_FIELDS, validate } from "./fields";
 
 export type Staged = { orig: string; value: string };
 type Change = { key: string; path: string; field: string; prev?: string; next?: string };
@@ -96,7 +96,7 @@ class Store {
     for (const i of inputs) {
       const t = this.byPath.get(i.path);
       if (!t || !this.editable(t)) { skipped++; continue; }
-      const v = i.field === RIFF_SYNC ? i.value : normalize(i.value);
+      const v = isPseudo(i.field) ? i.value : normalize(i.value);
       if (validate(i.field, v)) { invalid++; continue; }
       const key = K(i.path, i.field);
       if (seen.has(key)) continue;
@@ -159,13 +159,13 @@ class Store {
       const [path, field] = k.split("\u0001");
       return { path, field, value: this.byPath.get(path)?.fields[field] ?? "" };
     });
-    // a riff-sync row has no orig field value: remove it directly
-    const riff = keys.filter((k) => k.endsWith("\u0001" + RIFF_SYNC));
-    if (riff.length) {
-      riff.forEach((k) => this.staged.delete(k));
-      api.stageDiscard(riff.map((k) => ({ path: k.split("\u0001")[0], field: RIFF_SYNC })));
+    // pseudo rows (RIFF / Album Artist key sync) have no field value: remove them directly
+    const pseudo = keys.filter((k) => isPseudo(k.split("\u0001")[1]));
+    if (pseudo.length) {
+      pseudo.forEach((k) => this.staged.delete(k));
+      api.stageDiscard(pseudo.map((k) => { const [path, field] = k.split("\u0001"); return { path, field }; }));
     }
-    this.edit(inputs.filter((i) => i.field !== RIFF_SYNC), label);
+    this.edit(inputs.filter((i) => !isPseudo(i.field)), label);
   }
 
   // ---------------------------------------------------------------- view
@@ -194,6 +194,7 @@ class Store {
     { key: "placeholder", label: "Giá trị giữ chỗ", test: (t) => this.editable(t) && ["artist", "album", "title", "albumartist"].some((f) => PLACEHOLDERS.test(this.val(t, f))) },
     { key: "space", label: "Có khoảng trắng thừa", test: (t) => this.editable(t) && TEXT_FIELDS.some((f) => { const v = this.val(t, f); return v !== v.replace(/\s+/g, " ").trim(); }) },
     { key: "nfd", label: "Không chuẩn Unicode", test: (t) => this.editable(t) && TEXT_FIELDS.some((f) => { const v = this.val(t, f); return v !== v.normalize("NFC"); }) },
+    { key: "aa", label: "Album Artist lệch giữa các khoá", test: (t) => t.aaMismatch && !this.staged.has(K(t.path, AA_SYNC)) && !this.isPending(t, "albumartist") },
     { key: "riff", label: "WAV: RIFF INFO lệch", test: (t) => t.riffMismatch && !this.staged.has(K(t.path, RIFF_SYNC)) },
     { key: "readonly", label: "Không hỗ trợ sửa", test: (t) => t.readonly },
   ];

@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS tracks (
   path TEXT PRIMARY KEY, source_id INTEGER NOT NULL, dir TEXT NOT NULL, file TEXT NOT NULL, ext TEXT NOT NULL,
   size INTEGER NOT NULL, mtime INTEGER NOT NULL, fields TEXT NOT NULL, has_art INTEGER NOT NULL DEFAULT 0,
   format TEXT NOT NULL DEFAULT '', duration_ms INTEGER, riff_mismatch INTEGER NOT NULL DEFAULT 0,
-  error TEXT, readonly INTEGER NOT NULL DEFAULT 0);
+  aa_mismatch INTEGER NOT NULL DEFAULT 0, error TEXT, readonly INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS tracks_source ON tracks(source_id);
 CREATE TABLE IF NOT EXISTS staged (
   path TEXT NOT NULL, field TEXT NOT NULL, orig TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (path, field));
@@ -53,15 +53,33 @@ fn row_to_track(r: &rusqlite::Row) -> rusqlite::Result<TrackRow> {
         riff_mismatch: r.get::<_, i64>(11)? != 0,
         error: r.get(12)?,
         readonly: r.get::<_, i64>(13)? != 0,
+        aa_mismatch: r.get::<_, i64>(14)? != 0,
     })
 }
 
-const TRACK_COLS: &str = "path, source_id, dir, file, ext, size, mtime, fields, has_art, format, duration_ms, riff_mismatch, error, readonly";
+const TRACK_COLS: &str = "path, source_id, dir, file, ext, size, mtime, fields, has_art, format, duration_ms, riff_mismatch, error, readonly, aa_mismatch";
+
+/// Schema upgrades for indexes created by older builds (PRAGMA user_version).
+fn migrate(conn: &Connection) -> Result<()> {
+    let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    if v < 1 {
+        // v1 adds the Album Artist key check: add the column if missing and make the
+        // next scan re-read every file (mtime -1 never matches a real file)
+        let has: bool = conn.prepare("SELECT 1 FROM pragma_table_info('tracks') WHERE name = 'aa_mismatch'")?.exists([])?;
+        if !has {
+            conn.execute_batch("ALTER TABLE tracks ADD COLUMN aa_mismatch INTEGER NOT NULL DEFAULT 0;")?;
+            conn.execute_batch("UPDATE tracks SET mtime = -1;")?;
+        }
+        conn.execute_batch("PRAGMA user_version = 1;")?;
+    }
+    Ok(())
+}
 
 impl Db {
     pub fn open(path: &Path) -> Result<Db> {
         let conn = Connection::open(path)?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Db { conn })
     }
 
@@ -139,12 +157,12 @@ impl Db {
         let tx = self.conn.unchecked_transaction()?;
         {
             let mut st = tx.prepare(&format!(
-                "INSERT OR REPLACE INTO tracks({TRACK_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)"
+                "INSERT OR REPLACE INTO tracks({TRACK_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)"
             ))?;
             for t in rows {
                 st.execute(params![
                     t.path, t.source_id, t.dir, t.file, t.ext, t.size as i64, t.mtime, serde_json::to_string(&t.fields)?,
-                    t.has_art as i64, t.format, t.duration_ms.map(|x| x as i64), t.riff_mismatch as i64, t.error, t.readonly as i64
+                    t.has_art as i64, t.format, t.duration_ms.map(|x| x as i64), t.riff_mismatch as i64, t.error, t.readonly as i64, t.aa_mismatch as i64
                 ])?;
             }
         }
@@ -314,7 +332,7 @@ mod tests {
         f.insert("title".into(), title.into());
         TrackRow {
             path: path.into(), source_id: 1, dir: "/m".into(), file: path.rsplit('/').next().unwrap().into(), ext: "flac".into(),
-            size: 10, mtime: 5, fields: f, has_art: false, format: "FLAC".into(), duration_ms: None, riff_mismatch: false, error: None, readonly: false,
+            size: 10, mtime: 5, fields: f, has_art: false, format: "FLAC".into(), duration_ms: None, riff_mismatch: false, aa_mismatch: false, error: None, readonly: false,
         }
     }
 
@@ -343,6 +361,27 @@ mod tests {
         } // dropped without any explicit save
         let db = Db::open(&p).unwrap();
         assert_eq!(db.staged().unwrap().len(), 1, "APP-STAGE-R5");
+    }
+
+    #[test]
+    fn old_index_gets_new_column_and_is_rescanned() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("old.db");
+        {
+            // tracks table as created by the first release (no aa_mismatch column)
+            let c = Connection::open(&p).unwrap();
+            c.execute_batch(&SCHEMA.replace("\n  aa_mismatch INTEGER NOT NULL DEFAULT 0, error TEXT,", " error TEXT,")).unwrap();
+            c.execute("INSERT INTO tracks(path, source_id, dir, file, ext, size, mtime, fields) VALUES ('/m/a.flac', 1, '/m', 'a.flac', 'flac', 10, 5, '{}')", []).unwrap();
+        }
+        let db = Db::open(&p).unwrap();
+        let t = db.track("/m/a.flac").unwrap().unwrap();
+        assert_eq!(t.mtime, -1, "forces a re-read on the next scan");
+        assert!(!t.aa_mismatch);
+        drop(db);
+        // second open: no further changes
+        let db = Db::open(&p).unwrap();
+        db.upsert_tracks(&[row("/m/a.flac", "A")]).unwrap();
+        assert_eq!(Db::open(&p).unwrap().track("/m/a.flac").unwrap().unwrap().mtime, 5);
     }
 
     #[test]

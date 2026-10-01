@@ -184,6 +184,21 @@ fn wav_with_non_riff_trailer_keeps_trailer_and_tags_are_readable() {
 }
 
 #[test]
+fn album_artist_key_mismatch_is_flagged_and_fixed_by_writing() {
+    let d = tempfile::tempdir().unwrap();
+    // the Decca box-set case: empty "albumartist" next to a filled "ALBUM ARTIST"
+    let p = make_flac(d.path(), &["album=Walton & Stravinsky - Violin Concertos", "albumartist=", "ALBUM ARTIST=Kyung Wha Chung"]);
+    let t = read_track(&p).unwrap();
+    assert_eq!(t.fields.get("albumartist").unwrap(), "Kyung Wha Chung");
+    assert!(t.aa_mismatch);
+    write_track(&p, &fields(&[("albumartist", "Kyung Wha Chung")])).unwrap();
+    assert!(!read_track(&p).unwrap().aa_mismatch);
+    // same value under two keys is fine
+    let q = make_flac(d.path(), &["ALBUMARTIST=A", "ALBUM ARTIST=A"]);
+    assert!(!read_track(&q).unwrap().aa_mismatch);
+}
+
+#[test]
 fn removing_a_field_empties_it() {
     let d = tempfile::tempdir().unwrap();
     let p = make_flac(d.path(), &["TITLE=A", "GENRE=Pop"]);

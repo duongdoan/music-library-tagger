@@ -2,7 +2,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, on, type ApplyReport, type FileResult, type RunInfo, type StageInput, type TrackRow } from "../api";
 import { store, K } from "../store";
-import { fmtN, LABEL, normalize, RIFF_SYNC, TEXT_FIELDS } from "../fields";
+import { AA_SYNC, fmtN, LABEL, normalize, RIFF_SYNC, TEXT_FIELDS } from "../fields";
+
+const PSEUDO_TEXT: Record<string, string> = { [RIFF_SYNC]: "Ghi lại RIFF INFO theo ID3", [AA_SYNC]: "Ghi Album Artist vào mọi khoá đang dùng" };
 
 export function Modal({ title, onClose, children, footer, wide }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   useEffect(() => {
@@ -304,7 +306,7 @@ function ByFile({ list, on_, toggle }: { list: Item[]; on_: Set<string>; toggle:
     rows.push(
       <tr key={x.key}><td><input type="checkbox" checked={on_.has(x.key)} onChange={(e) => toggle([x.key], e.target.checked)} aria-label="Chọn" /></td>
         <td>{LABEL[x.field]}</td>
-        {x.field === RIFF_SYNC ? <td colSpan={2}>Ghi lại RIFF INFO theo ID3</td> : <><td className="old">{show(x.orig)}</td><td><span className="new">{show(x.value)}</span></td></>}</tr>,
+        {PSEUDO_TEXT[x.field] ? <td colSpan={2}>{PSEUDO_TEXT[x.field]}{x.field === AA_SYNC ? ` («${x.t.fields.albumartist ?? ""}»)` : ""}</td> : <><td className="old">{show(x.orig)}</td><td><span className="new">{show(x.value)}</span></td></>}</tr>,
     );
   }
   return (
@@ -326,7 +328,7 @@ function ByField({ list, on_, toggle }: { list: Item[]; on_: Set<string>; toggle
       <tbody>{groups.slice(0, 500).map((xs) => {
         const ks = xs.map((x) => x.key);
         return (<tr key={ks[0]}><td><input type="checkbox" checked={ks.every((k) => on_.has(k))} onChange={(e) => toggle(ks, e.target.checked)} aria-label="Chọn nhóm" /></td>
-          <td>{LABEL[xs[0].field]}</td><td>{xs[0].field === RIFF_SYNC ? "Ghi lại RIFF INFO theo ID3" : <><span className="old">{show(xs[0].orig)}</span> → <span className="new">{show(xs[0].value)}</span></>}</td><td className="num">{fmtN(xs.length)}</td></tr>);
+          <td>{LABEL[xs[0].field]}</td><td>{PSEUDO_TEXT[xs[0].field] ? PSEUDO_TEXT[xs[0].field] : <><span className="old">{show(xs[0].orig)}</span> → <span className="new">{show(xs[0].value)}</span></>}</td><td className="num">{fmtN(xs.length)}</td></tr>);
       })}</tbody></table>
   );
 }

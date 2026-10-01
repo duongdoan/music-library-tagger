@@ -163,6 +163,7 @@ Thu hẹp bảng để rà soát. Thay cho việc lọc trên bảng tính.
   - "Không chuẩn Unicode": chuỗi có dạng tách dấu (APP-TAG-R4)
   - "Giá trị giữ chỗ": có "Unknown Artist", "Unknown Title"… (APP-TAG-R12)
   - "WAV: RIFF INFO lệch" (APP-TAG-R10)
+  - "Album Artist lệch giữa các khoá" (APP-TAG-R13)
 - Lọc theo cột: chuột phải vào tiêu đề cột, chọn "Lọc theo giá trị…".
 
 ### Luồng chính

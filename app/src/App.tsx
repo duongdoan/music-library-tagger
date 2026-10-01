@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import { store, useStore } from "./store";
-import { addSource, changeCase, CASE_LABEL, cleanText, numberTracks, riffSync, startListeners } from "./actions";
+import { addSource, refreshStaleSources, changeCase, CASE_LABEL, cleanText, numberTracks, syncTags, startListeners } from "./actions";
 import { api } from "./api";
 import { fmtN, LABEL, TEXT_FIELDS } from "./fields";
 import Grid from "./components/Grid";
@@ -27,6 +27,7 @@ export default function App() {
       .then(() => {
         // APP-STAGE-R5: offer to restore staged edits left from a previous session
         if (store.staged.size && !booted) setRestore(store.staged.size);
+        if (!booted) refreshStaleSources();
         booted = true;
         setReady(true);
       })
@@ -70,7 +71,7 @@ export default function App() {
         <button className="btn" onClick={() => numberTracks()}>Đánh số track</button>
         <button className="btn" onClick={() => setDialog({ kind: "case" })}>Chữ hoa…</button>
         <button className="btn" onClick={cleanText}>Dọn khoảng trắng</button>
-        <button className="btn" onClick={riffSync} title="Ghi lại RIFF INFO của WAV theo ID3">Đồng bộ RIFF INFO</button>
+        <button className="btn" onClick={syncTags} title="Ghi lại RIFF INFO của WAV theo ID3, và ghi Album Artist vào mọi khoá file đang dùng">Đồng bộ tag lệch</button>
         <input className="search" type="search" placeholder="Tìm title, artist, album…" aria-label="Tìm kiếm" value={query} onChange={(e) => store.setView({ query: e.target.value })} />
         <button className="btn" onClick={() => setDialog({ kind: "settings" })} title="Cài đặt (⌘,)">⚙</button>
       </div>

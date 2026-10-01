@@ -14,6 +14,8 @@ use std::sync::Mutex;
 
 /// Staged pseudo-field: rewrite a WAV only to re-sync RIFF INFO (APP-EDIT-RIFFSYNC).
 pub const RIFF_SYNC: &str = "_riffsync";
+/// Staged pseudo-field: rewrite Album Artist so every key the file uses agrees (APP-TAG-R13).
+pub const AA_SYNC: &str = "_aasync";
 /// Files above this size are written in place (journal still protects them).
 pub const ATOMIC_LIMIT: u64 = 500 * 1024 * 1024;
 
@@ -74,7 +76,7 @@ fn tmp_path(p: &Path) -> PathBuf {
 /// (APP-WRITE-R5, R6). On any failure the original is untouched and the temp is removed.
 pub fn write_safely(p: &Path, changes: &Fields, in_place: bool) -> Result<()> {
     let size = fs::metadata(p)?.len();
-    let real: Fields = changes.iter().filter(|(k, _)| k.as_str() != RIFF_SYNC).map(|(k, v)| (k.clone(), v.clone())).collect();
+    let real: Fields = changes.iter().filter(|(k, _)| !k.starts_with('_')).map(|(k, v)| (k.clone(), v.clone())).collect();
     if in_place || size > ATOMIC_LIMIT {
         tags::write_track(p, &real)?;
         return tags::verify(p, &real);
@@ -109,7 +111,7 @@ fn label(field: &str) -> &str {
     match field {
         "title" => "Title", "artist" => "Artist", "album" => "Album", "albumartist" => "Album Artist", "composer" => "Composer",
         "genre" => "Genre", "year" => "Year", "track" => "Track", "tracktotal" => "Track Total", "disc" => "Disc",
-        "disctotal" => "Disc Total", "comment" => "Comment", RIFF_SYNC => "RIFF INFO", other => other,
+        "disctotal" => "Disc Total", "comment" => "Comment", RIFF_SYNC => "RIFF INFO", AA_SYNC => "Khoá Album Artist", other => other,
     }
 }
 
@@ -205,9 +207,15 @@ fn apply_one(db: &Mutex<Db>, run: i64, path: &str, changes: &Fields, in_place: b
     }
     // APP-WRITE-R3: journal the values the file holds right now
     let current = tags::read_track(p).map_err(Fatal::File)?.fields;
+    let mut changes = changes.clone();
+    if changes.contains_key(AA_SYNC) && !changes.contains_key("albumartist") {
+        // writing the shown value again updates every Album Artist key the file uses
+        changes.insert("albumartist".into(), current.get("albumartist").cloned().unwrap_or_default());
+    }
+    let changes = &changes;
     let entries: Vec<(String, String, String)> = changes
         .iter()
-        .map(|(k, v)| (k.clone(), if k == RIFF_SYNC { String::new() } else { current.get(k).cloned().unwrap_or_default() }, v.clone()))
+        .map(|(k, v)| (k.clone(), if k.starts_with('_') { String::new() } else { current.get(k).cloned().unwrap_or_default() }, v.clone()))
         .collect();
     db.lock().unwrap().journal_before(run, path, &entries).map_err(Fatal::Journal)?;
 
@@ -227,7 +235,7 @@ fn apply_one(db: &Mutex<Db>, run: i64, path: &str, changes: &Fields, in_place: b
 pub fn undo_plan(db: &Db, run: i64) -> Result<UndoPlan> {
     let mut plan = UndoPlan { run_id: run, stage: vec![], changed_after: vec![], missing: vec![] };
     for (path, field, before, after) in db.journal(run)? {
-        if field == RIFF_SYNC {
+        if field.starts_with('_') {
             continue;
         }
         let Some(t) = db.track(&path)? else {
@@ -330,6 +338,29 @@ mod tests {
         assert_eq!(r.error, 2);
         assert_eq!(r.results[0].message.as_deref(), Some("Không có quyền ghi file"));
         assert_eq!(db.lock().unwrap().staged().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn album_artist_key_sync_rewrites_the_shown_value() {
+        let (_d, db, p) = setup(1);
+        // give the file a TXXX:Album Artist that disagrees with TPE2
+        let path = Path::new(&p[0]);
+        let mut t = id3::Tag::read_from_path(path).unwrap();
+        use id3::TagLike;
+        t.set_album_artist("Kyung Wha Chung");
+        t.add_frame(id3::frame::ExtendedText { description: "Album Artist".into(), value: "".into() });
+        let mut buf = vec![];
+        t.write_to(&mut buf, id3::Version::Id3v24).unwrap();
+        crate::tags::riff::write_wav(path, &[], Some(&buf)).unwrap();
+        let src = db.lock().unwrap().sources().unwrap()[0].clone();
+        scan::scan(&db, &src, path.parent().unwrap(), &AtomicBool::new(false), 1, &|_| {}, &|_, _| {}).unwrap();
+        assert!(db.lock().unwrap().track(&p[0]).unwrap().unwrap().aa_mismatch);
+        stage(&db, &p[0], AA_SYNC, "1");
+        let r = apply(&db, &items(&db), None, false, &AtomicBool::new(false), &|_, _, _| {}).unwrap();
+        assert_eq!(r.ok, 1, "{:?}", r.results);
+        let row = db.lock().unwrap().track(&p[0]).unwrap().unwrap();
+        assert!(!row.aa_mismatch);
+        assert_eq!(row.fields.get("albumartist").unwrap(), "Kyung Wha Chung");
     }
 
     #[test]

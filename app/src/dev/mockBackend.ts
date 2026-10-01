@@ -15,6 +15,9 @@ export function installMockBackend() {
   const journal: { run: number; path: string; field: string; before: string; after: string }[] = [];
   const key = (p: string, f: string) => p + "\u0001" + f;
   const source = { id: 1, path: (fixture as TrackRow[])[0]?.dir.split("/testlib")[0] + "/testlib", name: "testlib (mock)", excludes: ["roon-backup"], status: "ready", lastScan: 0 };
+  // one sample with the Decca-style empty "albumartist" key, for the APP-TAG-R13 filter
+  const flac = [...tracks.values()].find((t) => t.ext === "flac");
+  if (flac) flac.aaMismatch = true;
   (window as any).__mock = { tracks, staged, runs, journal, conflictPath: null as string | null };
 
   mockIPC(
@@ -56,7 +59,9 @@ export function installMockBackend() {
                 const s = staged.get(key(p, i.field));
                 if (!s) continue;
                 journal.push({ run: id, path: p, field: i.field, before: t.fields[i.field] ?? "", after: s.value });
-                if (i.field !== "_riffsync") { if (s.value) t.fields[i.field] = s.value; else delete t.fields[i.field]; } else t.riffMismatch = false;
+                if (i.field === "_riffsync") t.riffMismatch = false;
+                else if (i.field === "_aasync") t.aaMismatch = false;
+                else { if (s.value) t.fields[i.field] = s.value; else delete t.fields[i.field]; if (i.field === "albumartist") t.aaMismatch = false; }
                 staged.delete(key(p, i.field));
               }
               r = { path: p, status: "ok", message: null, row: structuredClone(t) };

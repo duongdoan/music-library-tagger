@@ -23,6 +23,8 @@ pub struct TrackTags {
     pub duration_ms: Option<u64>,
     /// WAV only: RIFF INFO disagrees with ID3 (APP-TAG-R10)
     pub riff_mismatch: bool,
+    /// Album Artist stored under several keys with different values (APP-TAG-R13)
+    pub aa_mismatch: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +42,7 @@ pub struct TrackRow {
     pub format: String,
     pub duration_ms: Option<u64>,
     pub riff_mismatch: bool,
+    pub aa_mismatch: bool,
     /// "Lỗi đọc: …" (APP-SCAN-R6)
     pub error: Option<String>,
     /// listed but not editable (APP-TAG-R11)

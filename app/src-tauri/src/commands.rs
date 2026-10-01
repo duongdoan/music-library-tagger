@@ -1,5 +1,5 @@
 //! Tauri commands: the only surface the UI talks to.
-use crate::apply::{self, ApplyItem, FileResult, Report, UndoPlan, RIFF_SYNC};
+use crate::apply::{self, ApplyItem, FileResult, Report, UndoPlan, AA_SYNC, RIFF_SYNC};
 use crate::db::Db;
 use crate::model::{RunInfo, Source, StageInput, StagedChange, TrackRow, FIELDS};
 use crate::norm::{normalize, validate};
@@ -118,7 +118,7 @@ pub fn stage_set(state: State<AppState>, changes: Vec<StageInput>) -> CmdResult<
     let mut ok = vec![];
     let mut rejected = vec![];
     for c in changes {
-        if c.field == RIFF_SYNC {
+        if c.field == RIFF_SYNC || c.field == AA_SYNC {
             ok.push((c.path, c.field, c.value));
             continue;
         }

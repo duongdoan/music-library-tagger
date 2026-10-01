@@ -93,6 +93,13 @@ fn fields_from_id3(t: &id3::Tag) -> Fields {
     f
 }
 
+/// TPE2 and a foobar-style "TXXX:Album Artist" that disagree (APP-TAG-R13).
+fn id3_aa_mismatch(t: &id3::Tag) -> bool {
+    use id3::TagLike;
+    let tpe2 = normalize(t.album_artist().unwrap_or(""));
+    t.extended_texts().filter(|x| x.description.eq_ignore_ascii_case("album artist")).any(|x| normalize(&x.value) != tpe2)
+}
+
 fn format_name(kind: &str, rate: Option<u32>, bits: Option<u8>) -> String {
     match (rate, bits) {
         (Some(r), Some(b)) if r > 0 => format!("{kind} {b}/{}", trim_rate(r)),
@@ -116,6 +123,8 @@ fn read_generic(p: &Path) -> Result<TrackTags> {
         format: format_name(&ext(p).to_uppercase(), props.sample_rate(), props.bit_depth()),
         duration_ms: Some(props.duration().as_millis() as u64),
         riff_mismatch: false,
+        aa_mismatch: matches!(ext(p).as_str(), "mp3" | "aif" | "aiff")
+            && id3::Tag::read_from_path(p).map(|t| id3_aa_mismatch(&t)).unwrap_or(false),
     })
 }
 
@@ -157,6 +166,7 @@ fn read_wav(p: &Path) -> Result<TrackTags> {
         format: format_name("WAV", props.sample_rate(), props.bit_depth()),
         duration_ms: Some(props.duration().as_millis() as u64),
         riff_mismatch,
+        aa_mismatch: id3.as_ref().map(id3_aa_mismatch).unwrap_or(false),
     })
 }
 
@@ -167,6 +177,7 @@ fn read_dsf(p: &Path) -> Result<TrackTags> {
     Ok(TrackTags {
         fields: tag.as_ref().map(fields_from_id3).unwrap_or_default(),
         has_art: tag.as_ref().map(|t| t.pictures().next().is_some()).unwrap_or(false),
+        aa_mismatch: tag.as_ref().map(id3_aa_mismatch).unwrap_or(false),
         format: dsd,
         duration_ms: if rate > 0 { Some(samples * 1000 / rate as u64) } else { None },
         riff_mismatch: false,
@@ -247,6 +258,19 @@ fn read_flac_fast(p: &Path) -> Result<TrackTags> {
             if vals.is_empty() { None } else { Some(vals.join("; ")) }
         })
     };
+    // APP-TAG-R13: the Album Artist spellings present in the file must agree (an empty
+    // "albumartist=" next to a filled "ALBUM ARTIST=" makes players disagree)
+    {
+        let mut seen: Vec<String> = vec![];
+        for key in ["ALBUMARTIST", "ALBUM ARTIST", "ALBUM_ARTIST"] {
+            let vals: Vec<String> = multi.iter().filter(|(k, _)| k == key).map(|(_, v)| normalize(v)).collect();
+            if !vals.is_empty() {
+                seen.push(vals.join("; "));
+            }
+        }
+        seen.dedup();
+        t.aa_mismatch = seen.len() > 1;
+    }
     let f = &mut t.fields;
     for (field, keys) in VORBIS_KEYS {
         if let Some(v) = first(keys) {

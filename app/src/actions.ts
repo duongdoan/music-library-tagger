@@ -2,7 +2,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, on, type Source, type StageInput } from "./api";
 import { store, K } from "./store";
-import { fmtN, RIFF_SYNC, TEXT_FIELDS } from "./fields";
+import { AA_SYNC, fmtN, RIFF_SYNC, TEXT_FIELDS } from "./fields";
 
 let listening = false;
 export async function startListeners() {
@@ -51,6 +51,14 @@ export async function rescan(src: Source, folder?: string, quiet = false) {
   }
 }
 
+/** After an index upgrade (rows marked mtime -1) re-read those sources once, one after another. */
+export async function refreshStaleSources() {
+  const stale = store.sources.filter((s) => store.tracks.some((t) => t.sourceId === s.id && t.mtime === -1));
+  if (!stale.length) return;
+  store.notify(`Đang cập nhật chỉ mục cho ${stale.length} nguồn sau khi nâng cấp app…`);
+  for (const s of stale) await rescan(s, undefined, true);
+}
+
 function targetRows() {
   const sel = store.selected.map((p) => store.byPath.get(p)!).filter(Boolean);
   return sel.length ? sel : store.visible();
@@ -96,10 +104,15 @@ export function changeCase(kind: string, field: string) {
   store.notify(`Đã đổi ${r.applied} giá trị`);
 }
 
-/** APP-EDIT-RIFFSYNC */
-export function riffSync() {
-  const rows = targetRows().filter((t) => t.ext === "wav" && t.riffMismatch && !store.staged.has(K(t.path, RIFF_SYNC)));
-  if (!rows.length) return store.notify("Không có file WAV nào lệch RIFF INFO trong vùng chọn");
-  store.edit(rows.map((t) => ({ path: t.path, field: RIFF_SYNC, value: "1" })), "Đồng bộ RIFF INFO");
-  store.notify(`Đã thêm ${fmtN(rows.length)} file vào danh sách chờ đồng bộ RIFF INFO`);
+/** APP-EDIT-RIFFSYNC + Album Artist keys (APP-TAG-R13): stage a rewrite for every file whose tag areas/keys disagree */
+export function syncTags() {
+  const rows = targetRows();
+  const riff = rows.filter((t) => t.ext === "wav" && t.riffMismatch && !store.staged.has(K(t.path, RIFF_SYNC)));
+  const aa = rows.filter((t) => t.aaMismatch && !store.staged.has(K(t.path, AA_SYNC)) && !store.isPending(t, "albumartist"));
+  if (!riff.length && !aa.length) return store.notify("Không có file nào lệch RIFF INFO hoặc khoá Album Artist trong vùng chọn");
+  store.edit(
+    [...riff.map((t) => ({ path: t.path, field: RIFF_SYNC, value: "1" })), ...aa.map((t) => ({ path: t.path, field: AA_SYNC, value: "1" }))],
+    "Đồng bộ tag lệch",
+  );
+  store.notify([riff.length ? `${fmtN(riff.length)} file WAV (RIFF INFO)` : "", aa.length ? `${fmtN(aa.length)} file (khoá Album Artist)` : ""].filter(Boolean).join(" và ") + " đã vào danh sách chờ đồng bộ");
 }

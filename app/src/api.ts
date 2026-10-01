@@ -17,6 +17,7 @@ export interface TrackRow {
   format: string;
   durationMs: number | null;
   riffMismatch: boolean;
+  aaMismatch: boolean;
   error: string | null;
   readonly: boolean;
 }

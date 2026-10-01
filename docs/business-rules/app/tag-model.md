@@ -44,6 +44,11 @@ App quản lý tag của thư viện nhạc cá nhân, chủ yếu là nhạc Vi
   - Mỗi file WAV có trạng thái "RIFF INFO lệch" khi một trong 7 trường trên khác giữa hai vùng (sau chuẩn hoá APP-TAG-R4).
 - **APP-TAG-R11. Định dạng chỉ liệt kê.** File WMA xuất hiện trong bảng với tên file, thư mục và dung lượng, kèm nhãn "Không hỗ trợ sửa tag". App không đọc và không ghi tag của các file này. Chúng được tính vào APP-STAGE-R13.
 - **APP-TAG-R12. Giá trị giữ chỗ.** Các giá trị "Unknown Artist", "Unknown Album", "Unknown Title", "Various" (không phân biệt hoa/thường) được coi là thiếu dữ liệu khi lọc rà soát. App không tự xoá các giá trị này.
+- **APP-TAG-R13. Album Artist nhiều khoá phải thống nhất.** Một file có thể lưu Album Artist dưới nhiều khoá: "ALBUMARTIST", "ALBUM ARTIST", "ALBUM_ARTIST" (FLAC), hoặc TPE2 và "TXXX:Album Artist" (ID3).
+  - Khi đọc: app hiển thị giá trị của khoá đầu tiên có dữ liệu theo thứ tự trên.
+  - Khi các khoá có giá trị khác nhau (kể cả một khoá trống, một khoá có giá trị), file được đánh dấu "Album Artist lệch giữa các khoá". Lý do: trình phát có thể đọc khoá khác với app. Ví dụ Roon đọc khoá trống rồi dùng "Various Artists" của box set.
+  - Khi ghi Album Artist, app ghi cùng một giá trị vào mọi khoá file đang dùng.
+  - Lệnh "Đồng bộ tag lệch" ghi lại giá trị đang hiển thị vào mọi khoá mà không đổi giá trị (APP-EDIT-RIFFSYNC).
 
 ## Ví dụ số minh hoạ
 **WAV (lấy từ thư viện thật).** File "Perfect Crime.wav" có ID3 Artist "Guns N' Roses", RIFF INFO Artist "VINHSTUDIO LOSSLESS WORLD".
@@ -68,6 +73,10 @@ Số đo trên 200 file WAV lấy mẫu đều trong nas1 (01/10/2026):
 
 ## Trạng thái & chuyển trạng thái
 Xem [APP-STAGE](staging.md).
+
+**Album Artist nhiều khoá (lấy từ thư viện thật).** Thư mục "Decca Analogue Years/21 - Walton & Stravinsky" có `albumartist=` (trống) và `ALBUM ARTIST=Kyung Wha Chung, London Symphony Orchestra, André Previn`.
+- App hiển thị "Kyung Wha Chung, …" và đánh dấu "Album Artist lệch giữa các khoá".
+- Sau "Đồng bộ tag lệch" rồi áp dụng, mọi khoá cùng mang "Kyung Wha Chung, …".
 
 ## Thông báo lỗi & ràng buộc
 | Tình huống | Thông báo |

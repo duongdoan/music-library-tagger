@@ -1,10 +1,13 @@
 // Field metadata and the client-side copy of normalisation/validation (APP-TAG-R2, R4, R6).
 export const RIFF_SYNC = "_riffsync";
+export const AA_SYNC = "_aasync";
+/** pseudo fields: staged "rewrite" actions with no value of their own */
+export const isPseudo = (f: string) => f.startsWith("_");
 
 export const LABEL: Record<string, string> = {
   title: "Title", artist: "Artist", album: "Album", albumartist: "Album Artist", composer: "Composer",
   genre: "Genre", year: "Year", track: "Track", tracktotal: "Track Total", disc: "Disc", disctotal: "Disc Total",
-  comment: "Comment", [RIFF_SYNC]: "RIFF INFO",
+  comment: "Comment", [RIFF_SYNC]: "RIFF INFO", [AA_SYNC]: "Khoá Album Artist",
 };
 
 export const TEXT_FIELDS = ["title", "artist", "album", "albumartist", "composer", "genre", "comment"];

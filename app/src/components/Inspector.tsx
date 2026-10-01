@@ -35,7 +35,8 @@ function Single({ t }: { t: TrackRow }) {
           </span>
         </div>
       )}
-      {t.riffMismatch && <div className="infobox">RIFF INFO của file WAV này lệch với ID3. Dùng "Đồng bộ RIFF INFO" để sửa.</div>}
+      {t.riffMismatch && <div className="infobox">RIFF INFO của file WAV này lệch với ID3. Dùng "Đồng bộ tag lệch" để sửa.</div>}
+      {t.aaMismatch && <div className="infobox">Album Artist được lưu ở nhiều khoá với giá trị khác nhau (ví dụ một khoá trống). Trình phát như Roon có thể đọc khoá trống. Dùng "Đồng bộ tag lệch" hoặc sửa Album Artist để ghi cùng một giá trị vào mọi khoá.</div>}
       <div><h5>{t.file}</h5><div className="sub">{t.dir}</div></div>
       <div className="fields">
         {INSPECTOR_FIELDS.map((k) => <FieldInput key={t.path + k} t={t} field={k} />)}
