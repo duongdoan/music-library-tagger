@@ -121,6 +121,7 @@ function ActionBar({ onReview, onDiscard }: { onReview: () => void; onDiscard: (
   const n = useStore((s) => s.staged.size);
   const files = useStore((s) => s.pendingFiles());
   const scan = useStore((s) => s.scan);
+  const checking = useStore((s) => s.checking);
   const fill = useStore((s) => (s.lastFill && s.lastOp() === s.lastFill.op ? s.lastFill : null));
   return (
     <div className="actionbar">
@@ -136,7 +137,8 @@ function ActionBar({ onReview, onDiscard }: { onReview: () => void; onDiscard: (
           <button className="btn" onClick={() => api.cancelScan()}>Huỷ</button>
         </div>
       ) : (
-        <span className="ab-count">{n ? <><b>{fmtN(n)} thay đổi</b> trên {fmtN(files)} file</> : "Không có thay đổi chờ"}</span>
+        <span className="ab-count">{n ? <><b>{fmtN(n)} thay đổi</b> trên {fmtN(files)} file</> : "Không có thay đổi chờ"}
+          {checking && <span className="muted small"> · đang kiểm tra «{checking}»…</span>}</span>
       )}
       {fill && (
         <span className="fillopt">Tuỳ chọn điền:

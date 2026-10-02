@@ -12,6 +12,7 @@ export function installMockBackend() {
   const tracks = new Map<string, TrackRow>((fixture as TrackRow[]).map((t) => [t.path, structuredClone(t)]));
   const staged = new Map<string, Staged>();
   const runs: any[] = [];
+  let removed = false;
   const journal: { run: number; path: string; field: string; before: string; after: string }[] = [];
   const key = (p: string, f: string) => p + "\u0001" + f;
   const source = { id: 1, path: (fixture as TrackRow[])[0]?.dir.split("/testlib")[0] + "/testlib", name: "testlib (mock)", excludes: ["roon-backup"], status: "ready", lastScan: 0 };
@@ -23,7 +24,8 @@ export function installMockBackend() {
   mockIPC(
     async (cmd, args: any) => {
       switch (cmd) {
-        case "list_sources": return [source];
+        case "list_sources": return removed ? [] : [source];
+        case "remove_source": removed = true; tracks.clear(); staged.clear(); return null;
         case "load_tracks": return [...tracks.values()];
         case "get_setting": return null;
         case "set_setting": case "set_excludes": case "cancel_scan": case "cancel_apply": return null;

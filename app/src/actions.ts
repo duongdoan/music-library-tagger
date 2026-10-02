@@ -9,6 +9,7 @@ export async function startListeners() {
   if (listening) return;
   listening = true;
   await on.scanProgress((p) => {
+    if (store.checking) return; // quiet folder re-check: no progress bar
     const src = store.sources.find((s) => s.id === p.sourceId);
     store.scan = { ...p, name: src?.name ?? "" };
     store.emit();
@@ -28,8 +29,23 @@ export async function addSource() {
   }
 }
 
+/** APP-LIB-OPEN: take a source out of the library; files on disk are untouched. */
+export async function removeSource(src: Source) {
+  try {
+    await api.removeSource(src.id);
+    if (store.folder && (store.folder === src.path || store.folder.startsWith(src.path + "/"))) store.folder = null;
+    store.undoStack = [];
+    store.redoStack = [];
+    await store.init();
+    store.notify(`Đã gỡ nguồn «${src.name}» khỏi thư viện`);
+  } catch (e) {
+    store.notify(String(e));
+  }
+}
+
 /** Full scan of a source, or a quiet re-check of one folder (APP-SCAN-R12). */
 export async function rescan(src: Source, folder?: string, quiet = false) {
+  if (store.checking) return store.notify("Đang kiểm tra thư mục, thử lại sau giây lát");
   if (store.scan) return;
   store.scan = { sourceId: src.id, phase: "list", done: 0, total: 0, perSec: 0, name: src.name };
   store.emit();
@@ -48,6 +64,29 @@ export async function rescan(src: Source, folder?: string, quiet = false) {
   } finally {
     store.scan = null;
     await store.refreshSources();
+  }
+}
+
+const RECHECK_MS = 10 * 60 * 1000;
+
+/** APP-SCAN-R12 without the noise: re-check an opened folder in the background, at
+ * most every 10 minutes, and only speak up when something actually changed. */
+export async function recheckFolder(src: Source, path: string, force = false) {
+  if (store.scan || store.checking) return;
+  const last = store.checkedAt.get(path) ?? 0;
+  if (!force && Date.now() - last < RECHECK_MS) return;
+  store.checking = path.split("/").pop() ?? path;
+  store.emit();
+  try {
+    const s = await api.scanSource(src.id, path);
+    store.checkedAt.set(path, Date.now());
+    if (force && !s.read && !s.removed) store.notify(`«${store.checking}»: không có thay đổi`);
+    else if (s.read || s.removed) store.notify(`«${store.checking}»: cập nhật ${fmtN(s.read)} file${s.removed ? `, ${fmtN(s.removed)} file đã bị xoá khỏi ổ đĩa` : ""}`);
+  } catch {
+    // unreachable folder: the full scan reports it; stay quiet here
+  } finally {
+    store.checking = null;
+    store.emit();
   }
 }
 

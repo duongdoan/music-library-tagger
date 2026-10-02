@@ -27,6 +27,9 @@ class Store {
   query = "";
   sort: { field: string; desc: boolean } | null = null;
   scan: (ScanProgress & { name: string }) | null = null;
+  /** background re-check of one folder (APP-SCAN-R12): no progress bar */
+  checking: string | null = null;
+  checkedAt = new Map<string, number>();
   status = new Map<string, { status: string; message: string | null }>();
   toast: { text: string; id: number } | null = null;
   lastFill: { op: Op; redo: (mode: "copy" | "series") => void; mode: "copy" | "series" } | null = null;
@@ -48,6 +51,14 @@ class Store {
     this.sources = sources;
     this.setTracks(tracks);
     this.setStaged(staged);
+    try {
+      // reopen where the user left off, if that folder is still in the library
+      const v = JSON.parse(localStorage.getItem("mlt-view") || "{}");
+      if (v.folder && this.tracks.some((t) => t.dir === v.folder || t.dir.startsWith(v.folder + "/"))) this.folder = v.folder;
+      if (v.quick && this.quickFilters.some((f) => f.key === v.quick)) this.quick = v.quick;
+    } catch {
+      /* ignore */
+    }
     this.emit();
   }
   setTracks(rows: TrackRow[]) {
@@ -175,6 +186,11 @@ class Store {
   }
   setView(p: Partial<Pick<Store, "folder" | "quick" | "query" | "sort">>) {
     Object.assign(this, p);
+    try {
+      localStorage.setItem("mlt-view", JSON.stringify({ folder: this.folder, quick: this.quick }));
+    } catch {
+      /* remembering the view is a convenience only */
+    }
     this.emit();
   }
   notify(text: string) {
