@@ -102,6 +102,7 @@ pub fn read_row(source_id: i64, path: &Path, size: u64, mtime: i64) -> TrackRow 
         duration_ms: None,
         riff_mismatch: false,
         aa_mismatch: false,
+        aa_keys: vec![],
         error: None,
         readonly: false,
     };
@@ -117,6 +118,7 @@ pub fn read_row(source_id: i64, path: &Path, size: u64, mtime: i64) -> TrackRow 
             row.duration_ms = t.duration_ms;
             row.riff_mismatch = t.riff_mismatch;
             row.aa_mismatch = t.aa_mismatch;
+            row.aa_keys = t.aa_keys;
         }
         Err(e) => row.error = Some(format!("Lỗi đọc: {e}")),
     }

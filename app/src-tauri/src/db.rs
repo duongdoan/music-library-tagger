@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS tracks (
   path TEXT PRIMARY KEY, source_id INTEGER NOT NULL, dir TEXT NOT NULL, file TEXT NOT NULL, ext TEXT NOT NULL,
   size INTEGER NOT NULL, mtime INTEGER NOT NULL, fields TEXT NOT NULL, has_art INTEGER NOT NULL DEFAULT 0,
   format TEXT NOT NULL DEFAULT '', duration_ms INTEGER, riff_mismatch INTEGER NOT NULL DEFAULT 0,
-  aa_mismatch INTEGER NOT NULL DEFAULT 0, error TEXT, readonly INTEGER NOT NULL DEFAULT 0);
+  aa_mismatch INTEGER NOT NULL DEFAULT 0, aa_keys TEXT NOT NULL DEFAULT '[]', error TEXT, readonly INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS tracks_source ON tracks(source_id);
 CREATE TABLE IF NOT EXISTS staged (
   path TEXT NOT NULL, field TEXT NOT NULL, orig TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (path, field));
@@ -54,10 +54,11 @@ fn row_to_track(r: &rusqlite::Row) -> rusqlite::Result<TrackRow> {
         error: r.get(12)?,
         readonly: r.get::<_, i64>(13)? != 0,
         aa_mismatch: r.get::<_, i64>(14)? != 0,
+        aa_keys: serde_json::from_str(&r.get::<_, String>(15)?).unwrap_or_default(),
     })
 }
 
-const TRACK_COLS: &str = "path, source_id, dir, file, ext, size, mtime, fields, has_art, format, duration_ms, riff_mismatch, error, readonly, aa_mismatch";
+const TRACK_COLS: &str = "path, source_id, dir, file, ext, size, mtime, fields, has_art, format, duration_ms, riff_mismatch, error, readonly, aa_mismatch, aa_keys";
 
 /// Schema upgrades for indexes created by older builds (PRAGMA user_version).
 fn migrate(conn: &Connection) -> Result<()> {
@@ -75,6 +76,14 @@ fn migrate(conn: &Connection) -> Result<()> {
     if v < 2 {
         // v2: FLAC Album Artist under a non-standard key only is now flagged: re-read FLAC files
         conn.execute_batch("UPDATE tracks SET mtime = -1 WHERE ext = 'flac'; PRAGMA user_version = 2;")?;
+    }
+    if v < 3 {
+        // v3: keep the Album Artist keys of mismatched files so the review can show them
+        let has: bool = conn.prepare("SELECT 1 FROM pragma_table_info('tracks') WHERE name = 'aa_keys'")?.exists([])?;
+        if !has {
+            conn.execute_batch("ALTER TABLE tracks ADD COLUMN aa_keys TEXT NOT NULL DEFAULT '[]'; UPDATE tracks SET mtime = -1 WHERE aa_mismatch = 1;")?;
+        }
+        conn.execute_batch("PRAGMA user_version = 3;")?;
     }
     Ok(())
 }
@@ -161,12 +170,12 @@ impl Db {
         let tx = self.conn.unchecked_transaction()?;
         {
             let mut st = tx.prepare(&format!(
-                "INSERT OR REPLACE INTO tracks({TRACK_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)"
+                "INSERT OR REPLACE INTO tracks({TRACK_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)"
             ))?;
             for t in rows {
                 st.execute(params![
                     t.path, t.source_id, t.dir, t.file, t.ext, t.size as i64, t.mtime, serde_json::to_string(&t.fields)?,
-                    t.has_art as i64, t.format, t.duration_ms.map(|x| x as i64), t.riff_mismatch as i64, t.error, t.readonly as i64, t.aa_mismatch as i64
+                    t.has_art as i64, t.format, t.duration_ms.map(|x| x as i64), t.riff_mismatch as i64, t.error, t.readonly as i64, t.aa_mismatch as i64, serde_json::to_string(&t.aa_keys)?
                 ])?;
             }
         }
@@ -336,7 +345,7 @@ mod tests {
         f.insert("title".into(), title.into());
         TrackRow {
             path: path.into(), source_id: 1, dir: "/m".into(), file: path.rsplit('/').next().unwrap().into(), ext: "flac".into(),
-            size: 10, mtime: 5, fields: f, has_art: false, format: "FLAC".into(), duration_ms: None, riff_mismatch: false, aa_mismatch: false, error: None, readonly: false,
+            size: 10, mtime: 5, fields: f, has_art: false, format: "FLAC".into(), duration_ms: None, riff_mismatch: false, aa_mismatch: false, aa_keys: vec![], error: None, readonly: false,
         }
     }
 
@@ -374,7 +383,7 @@ mod tests {
         {
             // tracks table as created by the first release (no aa_mismatch column)
             let c = Connection::open(&p).unwrap();
-            c.execute_batch(&SCHEMA.replace("\n  aa_mismatch INTEGER NOT NULL DEFAULT 0, error TEXT,", " error TEXT,")).unwrap();
+            c.execute_batch(&SCHEMA.replace("\n  aa_mismatch INTEGER NOT NULL DEFAULT 0, aa_keys TEXT NOT NULL DEFAULT '[]', error TEXT,", " error TEXT,")).unwrap();
             c.execute("INSERT INTO tracks(path, source_id, dir, file, ext, size, mtime, fields) VALUES ('/m/a.flac', 1, '/m', 'a.flac', 'flac', 10, 5, '{}')", []).unwrap();
         }
         let db = Db::open(&p).unwrap();

@@ -204,6 +204,7 @@ fn album_artist_key_mismatch_is_flagged_and_fixed_by_writing() {
     let t = read_track(&p).unwrap();
     assert_eq!(t.fields.get("albumartist").unwrap(), "Kyung Wha Chung");
     assert!(t.aa_mismatch);
+    assert_eq!(t.aa_keys, vec![("ALBUMARTIST".to_string(), String::new()), ("ALBUM ARTIST".to_string(), "Kyung Wha Chung".to_string())]);
     write_track(&p, &fields(&[("albumartist", "Kyung Wha Chung")])).unwrap();
     assert!(!read_track(&p).unwrap().aa_mismatch);
     let mut f = File::open(&p).unwrap();

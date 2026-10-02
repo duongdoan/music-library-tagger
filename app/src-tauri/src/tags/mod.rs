@@ -101,6 +101,19 @@ fn id3_aa_mismatch(t: &id3::Tag) -> bool {
     t.extended_texts().filter(|x| x.description.eq_ignore_ascii_case("album artist")).any(|x| normalize(&x.value) != tpe2)
 }
 
+/// The Album Artist frames of an ID3 tag, for the review screen.
+fn id3_aa_keys(t: &id3::Tag) -> Vec<(String, String)> {
+    use id3::TagLike;
+    let mut out = vec![];
+    if let Some(v) = t.album_artist() {
+        out.push(("TPE2".to_string(), normalize(v)));
+    }
+    for x in t.extended_texts().filter(|x| x.description.eq_ignore_ascii_case("album artist")) {
+        out.push((format!("TXXX:{}", x.description), normalize(&x.value)));
+    }
+    out
+}
+
 fn format_name(kind: &str, rate: Option<u32>, bits: Option<u8>) -> String {
     match (rate, bits) {
         (Some(r), Some(b)) if r > 0 => format!("{kind} {b}/{}", trim_rate(r)),
@@ -124,9 +137,22 @@ fn read_generic(p: &Path) -> Result<TrackTags> {
         format: format_name(&ext(p).to_uppercase(), props.sample_rate(), props.bit_depth()),
         duration_ms: Some(props.duration().as_millis() as u64),
         riff_mismatch: false,
-        aa_mismatch: matches!(ext(p).as_str(), "mp3" | "aif" | "aiff")
-            && id3::Tag::read_from_path(p).map(|t| id3_aa_mismatch(&t)).unwrap_or(false),
+        ..id3_flags(p)
     })
+}
+
+/// Album Artist key check for MP3 / AIFF, which are read through lofty.
+fn id3_flags(p: &Path) -> TrackTags {
+    let mut t = TrackTags::default();
+    if matches!(ext(p).as_str(), "mp3" | "aif" | "aiff") {
+        if let Ok(tag) = id3::Tag::read_from_path(p) {
+            t.aa_mismatch = id3_aa_mismatch(&tag);
+            if t.aa_mismatch {
+                t.aa_keys = id3_aa_keys(&tag);
+            }
+        }
+    }
+    t
 }
 
 /// RIFF INFO id for each field we keep in sync (APP-TAG-R10).
@@ -168,6 +194,7 @@ fn read_wav(p: &Path) -> Result<TrackTags> {
         duration_ms: Some(props.duration().as_millis() as u64),
         riff_mismatch,
         aa_mismatch: id3.as_ref().map(id3_aa_mismatch).unwrap_or(false),
+        aa_keys: id3.as_ref().filter(|t| id3_aa_mismatch(t)).map(id3_aa_keys).unwrap_or_default(),
     })
 }
 
@@ -179,6 +206,7 @@ fn read_dsf(p: &Path) -> Result<TrackTags> {
         fields: tag.as_ref().map(fields_from_id3).unwrap_or_default(),
         has_art: tag.as_ref().map(|t| t.pictures().next().is_some()).unwrap_or(false),
         aa_mismatch: tag.as_ref().map(id3_aa_mismatch).unwrap_or(false),
+        aa_keys: tag.as_ref().filter(|t| id3_aa_mismatch(t)).map(id3_aa_keys).unwrap_or_default(),
         format: dsd,
         duration_ms: if rate > 0 { Some(samples * 1000 / rate as u64) } else { None },
         riff_mismatch: false,
@@ -263,16 +291,21 @@ fn read_flac_fast(p: &Path) -> Result<TrackTags> {
     // "albumartist=" next to a filled "ALBUM ARTIST=" makes players disagree)
     {
         let mut seen: Vec<String> = vec![];
+        let mut keys: Vec<(String, String)> = vec![];
         for key in ["ALBUMARTIST", "ALBUM ARTIST", "ALBUM_ARTIST"] {
             let vals: Vec<String> = multi.iter().filter(|(k, _)| k == key).map(|(_, v)| normalize(v)).collect();
             if !vals.is_empty() {
                 seen.push(vals.join("; "));
+                keys.push((key.to_string(), vals.join("; ")));
             }
         }
         seen.dedup();
         // an Album Artist only under "ALBUM ARTIST" / "ALBUM_ARTIST" lacks the standard key players read
         let standard = multi.iter().any(|(k, v)| k == "ALBUMARTIST" && !v.trim().is_empty());
         t.aa_mismatch = seen.len() > 1 || (!standard && seen.iter().any(|v| !v.is_empty()));
+        if t.aa_mismatch {
+            t.aa_keys = keys;
+        }
     }
     let f = &mut t.fields;
     for (field, keys) in VORBIS_KEYS {

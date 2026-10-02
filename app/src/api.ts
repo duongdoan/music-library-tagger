@@ -18,6 +18,8 @@ export interface TrackRow {
   durationMs: number | null;
   riffMismatch: boolean;
   aaMismatch: boolean;
+  /** Album Artist keys found in the file when they disagree: [key, value] */
+  aaKeys: [string, string][];
   error: string | null;
   readonly: boolean;
 }

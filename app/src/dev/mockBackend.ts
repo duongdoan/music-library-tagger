@@ -17,7 +17,7 @@ export function installMockBackend() {
   const source = { id: 1, path: (fixture as TrackRow[])[0]?.dir.split("/testlib")[0] + "/testlib", name: "testlib (mock)", excludes: ["roon-backup"], status: "ready", lastScan: 0 };
   // one sample with the Decca-style empty "albumartist" key, for the APP-TAG-R13 filter
   const flac = [...tracks.values()].find((t) => t.ext === "flac");
-  if (flac) flac.aaMismatch = true;
+  if (flac) { flac.aaMismatch = true; flac.aaKeys = [["ALBUM ARTIST", flac.fields.albumartist ?? "Jacqueline du Pré"]]; }
   (window as any).__mock = { tracks, staged, runs, journal, conflictPath: null as string | null };
 
   mockIPC(

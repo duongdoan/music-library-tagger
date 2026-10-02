@@ -4,7 +4,6 @@ import { api, on, type ApplyReport, type FileResult, type RunInfo, type StageInp
 import { store, K } from "../store";
 import { AA_SYNC, fmtN, LABEL, normalize, RIFF_SYNC, TEXT_FIELDS } from "../fields";
 
-const PSEUDO_TEXT: Record<string, string> = { [RIFF_SYNC]: "Ghi lại RIFF INFO theo ID3", [AA_SYNC]: "Ghi Album Artist vào mọi khoá đang dùng" };
 
 export function Modal({ title, onClose, children, footer, wide }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   useEffect(() => {
@@ -202,7 +201,7 @@ export function ReviewDialog({ onClose, undoOf }: { onClose: () => void; undoOf?
     return { key, path, field, orig: s.orig, value: s.value, t: store.byPath.get(path)! };
   }).filter((x) => x.t).sort((a, b) => (a.path + a.field).localeCompare(b.path + b.field)), []);
   const [on_, setOn] = useState<Set<string>>(() => new Set(list.map((x) => x.key)));
-  const [tab, setTab] = useState<"file" | "field">("file");
+  const [tab, setTab] = useState<"album" | "file" | "field">("album");
   const [running, setRunning] = useState<{ done: number; total: number; started: number; current: string | null } | null>(null);
   const [results, setResults] = useState<FileResult[]>([]);
   const [report, setReport] = useState<ApplyReport | null>(null);
@@ -284,8 +283,12 @@ export function ReviewDialog({ onClose, undoOf }: { onClose: () => void; undoOf?
         ))}</tbody></table>
       ) : (
         <>
-          <div className="tabs"><button className={tab === "file" ? "on" : ""} onClick={() => setTab("file")}>Theo file</button><button className={tab === "field" ? "on" : ""} onClick={() => setTab("field")}>Theo trường</button></div>
-          {tab === "file" ? <ByFile list={list} on_={on_} toggle={toggle} /> : <ByField list={list} on_={on_} toggle={toggle} />}
+          <div className="tabs">
+            <button className={tab === "album" ? "on" : ""} onClick={() => setTab("album")}>Theo album</button>
+            <button className={tab === "field" ? "on" : ""} onClick={() => setTab("field")}>Theo trường</button>
+            <button className={tab === "file" ? "on" : ""} onClick={() => setTab("file")}>Theo file</button>
+          </div>
+          {tab === "album" ? <ByAlbum list={list} on_={on_} toggle={toggle} /> : tab === "file" ? <ByFile list={list} on_={on_} toggle={toggle} /> : <ByField list={list} on_={on_} toggle={toggle} />}
         </>
       )}
     </Modal>
@@ -310,6 +313,85 @@ function applyStatus(r: { done: number; total: number; started: number; current:
   return parts.join(" · ");
 }
 
+/** What a staged row changes, in the file's own terms (pseudo rows spelled out). */
+function describe(x: Item): { before: string; after: string } {
+  if (x.field === AA_SYNC) {
+    const keys = x.t.aaKeys ?? [];
+    const id3 = keys.some(([k]) => k === "TPE2" || k.startsWith("TXXX"));
+    const before = keys.map(([k, v]) => `${k} = ${v || "(trống)"}`);
+    if (!id3 && !keys.some(([k, v]) => k === "ALBUMARTIST" && v)) {
+      if (!keys.some(([k]) => k === "ALBUMARTIST")) before.push("ALBUMARTIST: (không có)");
+    }
+    const targets = id3 ? [...new Set(["TPE2", ...keys.map(([k]) => k)])] : [...new Set(["ALBUMARTIST", ...keys.map(([k]) => k)])];
+    const v = x.t.fields.albumartist ?? "";
+    return { before: before.join(" · ") || "(khoá lệch)", after: `${targets.join(", ")} = ${v || "(trống)"}` };
+  }
+  if (x.field === RIFF_SYNC) return { before: "RIFF INFO khác ID3", after: "RIFF INFO = giá trị ID3" };
+  return { before: x.orig, after: x.value };
+}
+const changeId = (x: Item) => { const d = describe(x); return x.field + "\u0000" + d.before + "\u0000" + d.after; };
+function Before({ x }: { x: Item }) {
+  const d = describe(x);
+  return <span className="old">{show(d.before)}</span>;
+}
+function After({ x }: { x: Item }) {
+  const d = describe(x);
+  return <span className="new">{show(d.after)}</span>;
+}
+
+/** One block per album folder; identical changes inside it collapse to one row with a file count. */
+function ByAlbum({ list, on_, toggle }: { list: Item[]; on_: Set<string>; toggle: (k: string[], v: boolean) => void }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [limit, setLimit] = useState(60);
+  const albums = useMemo(() => {
+    const m = new Map<string, Item[]>();
+    list.forEach((x) => m.set(x.t.dir, [...(m.get(x.t.dir) ?? []), x]));
+    return [...m.entries()];
+  }, [list]);
+  const flip = (id: string) => setOpen((o) => { const n = new Set(o); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  return (
+    <>
+      <p className="muted small">{fmtN(albums.length)} album · thay đổi giống nhau trong một album được gộp thành một dòng; bấm số file để xem từng file.</p>
+      <table className="diff album-view">
+        <thead><tr><th /><th>Trường</th><th>Hiện tại</th><th>Sau khi ghi</th><th className="num">File</th></tr></thead>
+        <tbody>
+          {albums.slice(0, limit).map(([dir, items]) => {
+            const keys = items.map((x) => x.key);
+            const files = new Set(items.map((x) => x.path)).size;
+            const album = items[0].t.fields.album || "(chưa có Album)";
+            const groups = new Map<string, Item[]>();
+            items.forEach((x) => { const id = changeId(x); groups.set(id, [...(groups.get(id) ?? []), x]); });
+            return [
+              <tr className="dir" key={"d" + dir}>
+                <td><input type="checkbox" checked={keys.every((k) => on_.has(k))} onChange={(e) => toggle(keys, e.target.checked)} aria-label="Chọn album" /></td>
+                <td colSpan={3}><b>{dir.split("/").pop()}</b> <span className="muted">· Album: {album}</span></td>
+                <td className="num">{fmtN(files)}</td>
+              </tr>,
+              ...[...groups.entries()].map(([id, xs]) => {
+                const ks = xs.map((x) => x.key);
+                const gid = dir + id;
+                return [
+                  <tr key={gid}>
+                    <td><input type="checkbox" checked={ks.every((k) => on_.has(k))} onChange={(e) => toggle(ks, e.target.checked)} aria-label="Chọn nhóm" /></td>
+                    <td>{LABEL[xs[0].field]}</td>
+                    <td><Before x={xs[0]} /></td>
+                    <td><After x={xs[0]} /></td>
+                    <td className="num"><button className="link" onClick={() => flip(gid)}>{fmtN(xs.length)} {open.has(gid) ? "▾" : "▸"}</button></td>
+                  </tr>,
+                  open.has(gid) ? (
+                    <tr key={gid + "f"} className="file"><td /><td colSpan={4}>{xs.map((x) => x.t.file).join(" · ")}</td></tr>
+                  ) : null,
+                ];
+              }),
+            ];
+          })}
+        </tbody>
+      </table>
+      {albums.length > limit && <button className="btn" onClick={() => setLimit((l) => l + 100)}>Hiện thêm ({fmtN(albums.length - limit)} album)</button>}
+    </>
+  );
+}
+
 type Item = { key: string; path: string; field: string; orig: string; value: string; t: TrackRow };
 
 function ByFile({ list, on_, toggle }: { list: Item[]; on_: Set<string>; toggle: (k: string[], v: boolean) => void }) {
@@ -331,7 +413,7 @@ function ByFile({ list, on_, toggle }: { list: Item[]; on_: Set<string>; toggle:
     rows.push(
       <tr key={x.key}><td><input type="checkbox" checked={on_.has(x.key)} onChange={(e) => toggle([x.key], e.target.checked)} aria-label="Chọn" /></td>
         <td>{LABEL[x.field]}</td>
-        {PSEUDO_TEXT[x.field] ? <td colSpan={2}>{PSEUDO_TEXT[x.field]}{x.field === AA_SYNC ? ` («${x.t.fields.albumartist ?? ""}»)` : ""}</td> : <><td className="old">{show(x.orig)}</td><td><span className="new">{show(x.value)}</span></td></>}</tr>,
+        <td><Before x={x} /></td><td><After x={x} /></td></tr>,
     );
   }
   return (
@@ -345,7 +427,7 @@ function ByFile({ list, on_, toggle }: { list: Item[]; on_: Set<string>; toggle:
 function ByField({ list, on_, toggle }: { list: Item[]; on_: Set<string>; toggle: (k: string[], v: boolean) => void }) {
   const groups = useMemo(() => {
     const g = new Map<string, Item[]>();
-    list.forEach((x) => { const id = x.field + "\u0000" + x.orig + "\u0000" + x.value; g.set(id, [...(g.get(id) ?? []), x]); });
+    list.forEach((x) => { const id = changeId(x); g.set(id, [...(g.get(id) ?? []), x]); });
     return [...g.values()].sort((a, b) => b.length - a.length);
   }, [list]);
   return (
@@ -353,7 +435,7 @@ function ByField({ list, on_, toggle }: { list: Item[]; on_: Set<string>; toggle
       <tbody>{groups.slice(0, 500).map((xs) => {
         const ks = xs.map((x) => x.key);
         return (<tr key={ks[0]}><td><input type="checkbox" checked={ks.every((k) => on_.has(k))} onChange={(e) => toggle(ks, e.target.checked)} aria-label="Chọn nhóm" /></td>
-          <td>{LABEL[xs[0].field]}</td><td>{PSEUDO_TEXT[xs[0].field] ? PSEUDO_TEXT[xs[0].field] : <><span className="old">{show(xs[0].orig)}</span> → <span className="new">{show(xs[0].value)}</span></>}</td><td className="num">{fmtN(xs.length)}</td></tr>);
+          <td>{LABEL[xs[0].field]}</td><td><Before x={xs[0]} /> → <After x={xs[0]} /></td><td className="num">{fmtN(xs.length)}</td></tr>);
       })}</tbody></table>
   );
 }

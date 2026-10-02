@@ -25,6 +25,8 @@ pub struct TrackTags {
     pub riff_mismatch: bool,
     /// Album Artist stored under several keys with different values (APP-TAG-R13)
     pub aa_mismatch: bool,
+    /// the Album Artist keys found in the file and their values, when they disagree
+    pub aa_keys: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +45,7 @@ pub struct TrackRow {
     pub duration_ms: Option<u64>,
     pub riff_mismatch: bool,
     pub aa_mismatch: bool,
+    pub aa_keys: Vec<(String, String)>,
     /// "Lỗi đọc: …" (APP-SCAN-R6)
     pub error: Option<String>,
     /// listed but not editable (APP-TAG-R11)
