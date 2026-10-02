@@ -7,11 +7,13 @@ import {
 import "@glideapps/glide-data-grid/dist/index.css";
 import { store, useStore, K } from "../store";
 import { formatDuration, NUMERIC, validate } from "../fields";
+import { coverFor } from "../covers";
 import type { StageInput, TrackRow } from "../api";
 
 type Col = { key: string; title: string; width: number; editable: boolean };
 const COLS: Col[] = [
   { key: "_state", title: "", width: 28, editable: false },
+  { key: "_art", title: "", width: 34, editable: false },
   { key: "file", title: "Tên file", width: 260, editable: false },
   { key: "track", title: "#", width: 44, editable: true },
   { key: "title", title: "Title", width: 220, editable: true },
@@ -75,6 +77,8 @@ function stepOf(src: string[]): number | null {
   return d;
 }
 
+const ART_COL = COLS.findIndex((c) => c.key === "_art");
+
 let altDown = false;
 window.addEventListener("keydown", (e) => (altDown = e.altKey));
 window.addEventListener("keyup", (e) => (altDown = e.altKey));
@@ -99,6 +103,14 @@ export default function Grid() {
     store.setSelected([]);
   }, [store.folder, store.quick, store.query]);
 
+  // repaint one thumbnail cell when its image arrives (rows may have changed meanwhile)
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const repaintArt = useCallback((path: string) => {
+    const r = rowsRef.current.findIndex((x) => x.path === path);
+    if (r >= 0) ref.current?.updateCells([{ cell: [ART_COL, r] }]);
+  }, []);
+
   const getCellContent = useCallback(
     ([c, r]: Item): GridCell => {
       const t = rows[r];
@@ -120,6 +132,13 @@ export default function Grid() {
                     ? ["○", cssVar("--muted")]
                     : ["", ""];
         return { kind: GridCellKind.Text, data: mark, displayData: mark, allowOverlay: false, readonly: true, themeOverride: color ? { textDark: color } : undefined };
+      }
+      if (col.key === "_art") {
+        // thumbnail: cached ones draw at once, others load in the background and repaint this cell
+        const c = coverFor(t, 64, () => repaintArt(t.path));
+        return c
+          ? { kind: GridCellKind.Image, data: [c.url], displayData: [c.url], allowOverlay: false, readonly: true, rounding: 2 }
+          : { kind: GridCellKind.Text, data: "", displayData: "", allowOverlay: false, readonly: true };
       }
       if (!col.editable) {
         const d =
@@ -325,7 +344,7 @@ export default function Grid() {
       onHeaderClicked={onHeaderClicked}
       keybindings={{ downFill: true, selectAll: true, copy: true, paste: false, search: false }}
       smoothScrollY
-      freezeColumns={2}
+      freezeColumns={3}
       getCellsForSelection={true}
     />
     </div>

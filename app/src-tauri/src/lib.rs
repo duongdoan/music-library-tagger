@@ -1,5 +1,6 @@
 pub mod apply;
 pub mod commands;
+pub mod covers;
 pub mod db;
 pub mod model;
 pub mod norm;
@@ -20,8 +21,11 @@ pub fn run() {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             let db = db::Db::open(&dir.join("library.db"))?;
+            let thumbs = app.path().app_cache_dir()?.join("thumbs");
             app.manage(AppState {
                 db: Arc::new(Mutex::new(db)),
+                thumbs,
+                folders: Arc::new(covers::FolderImages::new()),
                 scan_cancel: Arc::new(AtomicBool::new(false)),
                 apply_cancel: Arc::new(AtomicBool::new(false)),
             });
@@ -44,6 +48,7 @@ pub fn run() {
             commands::undo_plan,
             commands::get_setting,
             commands::set_setting,
+            commands::get_cover,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

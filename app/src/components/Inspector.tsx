@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { store, useStore } from "../store";
 import { BATCH_FIELDS, formatDuration, formatSize, INSPECTOR_FIELDS, LABEL, normalize, validate } from "../fields";
-import type { TrackRow } from "../api";
+import type { Cover, TrackRow } from "../api";
+import { coverFor } from "../covers";
 
 export default function Inspector() {
   const selected = useStore((s) => s.selected);
@@ -21,7 +22,7 @@ function Single({ t }: { t: TrackRow }) {
     return (<><h5>{t.file}</h5><div className="sub">{t.dir}</div><div className="infobox">Không hỗ trợ sửa tag định dạng {t.ext.toUpperCase()}.</div></>);
   return (
     <>
-      <div className={"art" + (t.hasArt ? "" : " none")}>{t.hasArt ? (store.val(t, "album") || "♪") : "Không có ảnh bìa"}</div>
+      <CoverView t={t} />
       {st && (
         <div className={st.status === "conflict" ? "confbox" : "errbox"}>
           <b>{st.status === "conflict" ? "Xung đột" : "Lỗi ghi"}</b> {st.message}
@@ -143,5 +144,28 @@ function Batch({ rows }: { rows: TrackRow[] }) {
       })}
       <div className="sticky-foot"><button className="btn primary" onClick={apply}>Áp vào {ok.length.toLocaleString("vi-VN")} file</button></div>
     </>
+  );
+}
+
+/** Large cover with its size and where it comes from (APP-LIB-INSPECT). */
+function CoverView({ t }: { t: TrackRow }) {
+  const [c, setC] = useState<Cover | null | undefined>(() => coverFor(t, 600));
+  useEffect(() => {
+    let live = true;
+    const now = coverFor(t, 600, () => live && setC(coverFor(t, 600)));
+    setC(now);
+    return () => { live = false; };
+  }, [t.path, t.mtime]);
+  if (c === undefined) return <div className="art loading" aria-busy="true">Đang tải ảnh bìa…</div>;
+  if (c === null) return <div className="art none">Không có ảnh bìa</div>;
+  const kb = c.bytes >= 1e6 ? (c.bytes / 1e6).toLocaleString("vi-VN", { maximumFractionDigits: 1 }) + " MB" : Math.round(c.bytes / 1024) + " KB";
+  return (
+    <figure className="cover">
+      <img src={c.url} alt={`Ảnh bìa ${t.fields.album ?? ""}`} />
+      <figcaption>
+        {c.width}×{c.height} · {kb} · {c.source === "embedded" ? "nhúng trong file" : `từ ${c.file ?? "file ảnh"} trong thư mục`}
+        {c.width < 500 && <span className="warn"> · ảnh nhỏ</span>}
+      </figcaption>
+    </figure>
   );
 }

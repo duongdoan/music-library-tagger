@@ -92,6 +92,14 @@ export function installMockBackend() {
           return { runId: id, ok, conflict: res.length - ok, error: 0, cancelled: 0, results: res };
         }
         case "list_runs": return runs;
+        case "get_cover": {
+          const t = tracks.get(args.path);
+          await new Promise((r) => setTimeout(r, 30));
+          if (!t?.hasArt) return null;
+          const hue = [...t.dir].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 0);
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="hsl(${hue},45%,40%)"/><text x="20" y="160" font-size="28" fill="white" font-family="sans-serif">${(t.fields.album ?? "").slice(0, 16).replace(/[<&]/g, "")}</text></svg>`;
+          return { url: "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg))), width: 1000, height: 1000, bytes: 312000, source: "embedded", file: null };
+        }
         case "undo_plan": {
           const stage: any[] = [], changedAfter: any[] = [];
           for (const j of journal.filter((x) => x.run === args.runId && x.field !== "_riffsync")) {

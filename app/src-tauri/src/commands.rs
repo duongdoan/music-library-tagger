@@ -12,6 +12,8 @@ use tauri::{AppHandle, Emitter, State};
 
 pub struct AppState {
     pub db: Arc<Mutex<Db>>,
+    pub thumbs: PathBuf,
+    pub folders: Arc<crate::covers::FolderImages>,
     pub scan_cancel: Arc<AtomicBool>,
     pub apply_cancel: Arc<AtomicBool>,
 }
@@ -197,4 +199,14 @@ pub fn get_setting(state: State<AppState>, key: String) -> CmdResult<Option<Stri
 #[tauri::command]
 pub fn set_setting(state: State<AppState>, key: String, value: String) -> CmdResult<()> {
     state.db.lock().unwrap().set_setting(&key, &value).map_err(err)
+}
+
+/// Cover thumbnail for the table (small size) or the inspector (large size).
+#[tauri::command]
+pub async fn get_cover(state: State<'_, AppState>, path: String, size: u32) -> CmdResult<Option<crate::covers::Cover>> {
+    let dir = state.thumbs.clone();
+    let folders = state.folders.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::covers::get(Path::new(&path), size.clamp(32, 1200), &dir, &folders).map_err(err))
+        .await
+        .map_err(err)?
 }
