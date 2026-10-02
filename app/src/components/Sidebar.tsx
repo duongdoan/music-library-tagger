@@ -1,5 +1,5 @@
 // Sources, folder tree and review filters (APP-LIB-OPEN, APP-LIB-FILTER).
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { store, useStore } from "../store";
 import { fmtN } from "../fields";
@@ -128,10 +128,9 @@ export default function Sidebar({ onAddSource, onHistory }: { onAddSource: () =>
   }, [store.tracks]);
   const trees = useMemo(() => sources.map((s) => buildTree(s, dirs)), [sources, dirs]);
 
-  const counts = useMemo(() => {
-    const ctx = store.filterCtx();
-    return new Map(store.quickFilters.map((f) => [f.key, store.tracks.reduce((n, t) => n + (f.test(t, ctx) ? 1 : 0), 0)]));
-  }, [version]);
+  // counts over the whole library: computed after the urgent render so edits stay instant
+  const lazyVersion = useDeferredValue(version);
+  const counts = useMemo(() => store.counts(), [lazyVersion]);
 
   return (
     <aside className="side">

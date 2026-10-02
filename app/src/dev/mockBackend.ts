@@ -10,6 +10,19 @@ type Staged = { orig: string; value: string };
 
 export function installMockBackend() {
   const tracks = new Map<string, TrackRow>((fixture as TrackRow[]).map((t) => [t.path, structuredClone(t)]));
+  // ?n=100000 adds synthetic tracks to measure the UI at library scale
+  const n = Number(new URLSearchParams(location.search).get("n") ?? 0);
+  const root = (fixture as TrackRow[])[0]?.dir.split("/testlib")[0] + "/testlib";
+  for (let i = 0; i < n; i++) {
+    const dir = `${root}/Synthetic/Artist ${Math.floor(i / 5000)}/Album ${Math.floor(i / 12)}`;
+    const file = `${String((i % 12) + 1).padStart(2, "0")} - Track ${i}.flac`;
+    tracks.set(`${dir}/${file}`, {
+      path: `${dir}/${file}`, sourceId: 1, dir, file, ext: "flac", size: 30_000_000, mtime: 1, hasArt: i % 7 !== 0,
+      fields: { title: `Track title ${i}`, artist: `Artist ${Math.floor(i / 5000)}`, album: `Album ${Math.floor(i / 12)}`,
+        ...(i % 9 ? { albumartist: `Artist ${Math.floor(i / 5000)}` } : {}), genre: "Classical", year: "1999", track: String((i % 12) + 1), tracktotal: "12" },
+      format: "FLAC 16/44.1", durationMs: 300000, riffMismatch: false, aaMismatch: i % 50 === 0, aaKeys: [], error: null, readonly: false,
+    });
+  }
   const staged = new Map<string, Staged>();
   const runs: any[] = [];
   let removed = false;

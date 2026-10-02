@@ -34,6 +34,19 @@ class Store {
   toast: { text: string; id: number } | null = null;
   lastFill: { op: Op; redo: (mode: "copy" | "series") => void; mode: "copy" | "series" } | null = null;
   private listeners = new Set<() => void>();
+  // ---- per-row caches so a library of 100k+ tracks stays responsive: results are
+  // recomputed only for rows whose data or staged values changed (rowRev)
+  private rowRev = new Map<string, number>();
+  private dirRev = new Map<string, number>();
+  private epoch = 0; // bumps on changes that affect every row (sources, status)
+  private pendingCount = new Map<string, number>();
+  private flagCache = new Map<string, { rev: number; epoch: number; bits: number }>();
+  private searchCache = new Map<string, { rev: number; text: string }>();
+  private dirCache = new Map<string, { rev: number; epoch: number; v: boolean }>();
+  private dirRows = new Map<string, TrackRow[]>();
+  private pendingMerge: { rows: TrackRow[]; removed: string[] } = { rows: [], removed: [] };
+  private mergeTimer: ReturnType<typeof setTimeout> | null = null;
+  private countsCache: { v: number; counts: Map<string, number> } | null = null;
   private visibleCache: { v: number; rows: TrackRow[] } | null = null;
 
   subscribe = (f: () => void) => {
@@ -64,19 +77,66 @@ class Store {
   setTracks(rows: TrackRow[]) {
     this.tracks = rows;
     this.byPath = new Map(rows.map((r) => [r.path, r]));
+    this.rebuildDirs();
+    this.invalidateAll();
   }
   setStaged(list: StagedChange[]) {
     this.staged = new Map(list.map((s) => [K(s.path, s.field), { orig: s.orig, value: s.value }]));
+    this.pendingCount = new Map();
+    for (const s of list) this.pendingCount.set(s.path, (this.pendingCount.get(s.path) ?? 0) + 1);
+    this.invalidateAll();
   }
+  /** Scan batches arrive every ~200 files: merge them at most twice a second (one sort per flush). */
   mergeRows(rows: TrackRow[], removed: string[]) {
-    for (const r of rows) this.byPath.set(r.path, r);
-    for (const p of removed) this.byPath.delete(p);
-    this.tracks = [...this.byPath.values()].sort((a, b) => (a.dir === b.dir ? a.file.localeCompare(b.file) : a.dir.localeCompare(b.dir)));
+    this.pendingMerge.rows.push(...rows);
+    this.pendingMerge.removed.push(...removed);
+    if (!this.mergeTimer) this.mergeTimer = setTimeout(() => this.flushMerge(), 500);
+  }
+  flushMerge() {
+    if (this.mergeTimer) clearTimeout(this.mergeTimer);
+    this.mergeTimer = null;
+    const { rows, removed } = this.pendingMerge;
+    this.pendingMerge = { rows: [], removed: [] };
+    if (!rows.length && !removed.length) return;
+    for (const r of rows) { this.byPath.set(r.path, r); this.bump(r.path, r.dir); }
+    for (const p of removed) { const d = this.byPath.get(p)?.dir; this.byPath.delete(p); this.bump(p, d); }
+    this.tracks = [...this.byPath.values()].sort((a, b) => (a.dir === b.dir ? (a.file < b.file ? -1 : a.file > b.file ? 1 : 0) : a.dir < b.dir ? -1 : 1));
+    this.rebuildDirs();
     this.emit();
   }
   async refreshSources() {
     this.sources = await api.listSources();
+    this.epoch++;
     this.emit();
+  }
+  /** Row data or staged values of `path` changed. */
+  bump(path: string, dir?: string) {
+    this.rowRev.set(path, (this.rowRev.get(path) ?? 0) + 1);
+    const d = dir ?? this.byPath.get(path)?.dir;
+    if (d) this.dirRev.set(d, (this.dirRev.get(d) ?? 0) + 1);
+  }
+  invalidateAll() {
+    this.epoch++;
+    this.flagCache.clear();
+    this.searchCache.clear();
+    this.dirCache.clear();
+  }
+  private rebuildDirs() {
+    this.dirRows = new Map();
+    for (const t of this.tracks) {
+      const a = this.dirRows.get(t.dir);
+      if (a) a.push(t); else this.dirRows.set(t.dir, [t]);
+    }
+  }
+  private setStagedValue(key: string, path: string, value: { orig: string; value: string } | undefined) {
+    const had = this.staged.has(key);
+    if (value === undefined) this.staged.delete(key); else this.staged.set(key, value);
+    const has = value !== undefined;
+    if (had !== has) {
+      const n = (this.pendingCount.get(path) ?? 0) + (has ? 1 : -1);
+      if (n > 0) this.pendingCount.set(path, n); else this.pendingCount.delete(path);
+    }
+    this.bump(path);
   }
 
   // ---------------------------------------------------------------- values
@@ -87,15 +147,14 @@ class Store {
     return this.staged.has(K(t.path, field));
   }
   hasPending(t: TrackRow) {
-    for (const k of this.staged.keys()) if (k.startsWith(t.path + "\u0001")) return true;
-    return false;
+    return this.pendingCount.has(t.path);
   }
   editable(t: TrackRow) {
     const src = this.sources.find((s) => s.id === t.sourceId);
     return !t.error && !t.readonly && src?.status !== "unavailable";
   }
   pendingFiles() {
-    return new Set([...this.staged.keys()].map((k) => k.split("\u0001")[0])).size;
+    return this.pendingCount.size;
   }
 
   // ---------------------------------------------------------------- editing (APP-STAGE)
@@ -134,8 +193,7 @@ class Store {
       const v = dir === 1 ? c.next : c.prev;
       const t = this.byPath.get(c.path)!;
       const orig = t.fields[c.field] ?? "";
-      if (v === undefined) this.staged.delete(c.key);
-      else this.staged.set(c.key, { orig, value: v });
+      this.setStagedValue(c.key, c.path, v === undefined ? undefined : { orig, value: v });
       send.push({ path: c.path, field: c.field, value: v ?? orig });
     }
     api.stageSet(send).catch((e) => this.notify(String(e)));
@@ -173,7 +231,7 @@ class Store {
     // pseudo rows (RIFF / Album Artist key sync) have no field value: remove them directly
     const pseudo = keys.filter((k) => isPseudo(k.split("\u0001")[1]));
     if (pseudo.length) {
-      pseudo.forEach((k) => this.staged.delete(k));
+      pseudo.forEach((k) => this.setStagedValue(k, k.split("\u0001")[0], undefined));
       api.stageDiscard(pseudo.map((k) => { const [path, field] = k.split("\u0001"); return { path, field }; }));
     }
     this.edit(inputs.filter((i) => !isPseudo(i.field)), label);
@@ -198,38 +256,97 @@ class Store {
     this.emit();
   }
 
+  /** Row tests whose result depends only on the row and its staged values: cached per row. */
+  private rowTests: [string, (t: TrackRow) => boolean][] = [
+    ["pending", (t) => this.hasPending(t)],
+    ["noaa", (t) => this.editable(t) && !this.val(t, "albumartist")],
+    ["noalbum", (t) => this.editable(t) && !this.val(t, "album")],
+    ["notrack", (t) => this.editable(t) && !this.val(t, "track")],
+    ["noart", (t) => this.editable(t) && !t.hasArt],
+    ["placeholder", (t) => this.editable(t) && ["artist", "album", "title", "albumartist"].some((f) => PLACEHOLDERS.test(this.val(t, f)))],
+    ["space", (t) => this.editable(t) && TEXT_FIELDS.some((f) => { const v = this.val(t, f); return v !== v.replace(/\s+/g, " ").trim(); })],
+    ["nfd", (t) => this.editable(t) && TEXT_FIELDS.some((f) => { const v = this.val(t, f); return v !== v.normalize("NFC"); })],
+    ["aa", (t) => t.aaMismatch && !this.staged.has(K(t.path, AA_SYNC)) && !this.isPending(t, "albumartist")],
+    ["riff", (t) => t.riffMismatch && !this.staged.has(K(t.path, RIFF_SYNC))],
+  ];
+  private bitOf = new Map(this.rowTests.map(([k], i) => [k, 1 << i]));
+  private bits(t: TrackRow): number {
+    const rev = this.rowRev.get(t.path) ?? 0;
+    const c = this.flagCache.get(t.path);
+    if (c && c.rev === rev && c.epoch === this.epoch) return c.bits;
+    let b = 0;
+    this.rowTests.forEach(([, test], i) => { if (test(t)) b |= 1 << i; });
+    this.flagCache.set(t.path, { rev, epoch: this.epoch, bits: b });
+    return b;
+  }
+  private flag = (key: string) => (t: TrackRow) => (this.bits(t) & this.bitOf.get(key)!) !== 0;
+  /** APP-LIB-FILTER "Album không đồng nhất", cached per folder. */
+  dirInconsistent(dir: string): boolean {
+    const rev = this.dirRev.get(dir) ?? 0;
+    const c = this.dirCache.get(dir);
+    if (c && c.rev === rev && c.epoch === this.epoch) return c.v;
+    const a = new Set<string>(), aa = new Set<string>();
+    for (const t of this.dirRows.get(dir) ?? []) {
+      if (!this.editable(t)) continue;
+      a.add(this.val(t, "album"));
+      aa.add(this.val(t, "albumartist"));
+    }
+    const v = a.size > 1 || aa.size > 1;
+    this.dirCache.set(dir, { rev, epoch: this.epoch, v });
+    return v;
+  }
+  private searchText(t: TrackRow): string {
+    const rev = this.rowRev.get(t.path) ?? 0;
+    const c = this.searchCache.get(t.path);
+    if (c && c.rev === rev) return c.text;
+    const text = [fold(this.val(t, "title")), fold(this.val(t, "artist")), fold(this.val(t, "album")), fold(this.val(t, "albumartist")), fold(t.file)].join("\u0001");
+    this.searchCache.set(t.path, { rev, text });
+    return text;
+  }
+
   quickFilters: QuickFilter[] = [
     { key: "all", label: "Tất cả", test: () => true },
-    { key: "pending", label: "Có thay đổi chờ", test: (t) => this.hasPending(t) },
+    { key: "pending", label: "Có thay đổi chờ", test: this.flag("pending") },
     { key: "err", label: "Lỗi", test: (t) => !!t.error || this.status.has(t.path) },
-    { key: "noaa", label: "Thiếu Album Artist", test: (t) => this.editable(t) && !this.val(t, "albumartist") },
-    { key: "noalbum", label: "Thiếu Album", test: (t) => this.editable(t) && !this.val(t, "album") },
-    { key: "notrack", label: "Thiếu Track", test: (t) => this.editable(t) && !this.val(t, "track") },
-    { key: "noart", label: "Thiếu ảnh bìa", test: (t) => this.editable(t) && !t.hasArt },
-    { key: "incons", label: "Album không đồng nhất", test: (t, c) => this.editable(t) && c.inconsistent.has(t.dir) },
-    { key: "placeholder", label: "Giá trị giữ chỗ", test: (t) => this.editable(t) && ["artist", "album", "title", "albumartist"].some((f) => PLACEHOLDERS.test(this.val(t, f))) },
-    { key: "space", label: "Có khoảng trắng thừa", test: (t) => this.editable(t) && TEXT_FIELDS.some((f) => { const v = this.val(t, f); return v !== v.replace(/\s+/g, " ").trim(); }) },
-    { key: "nfd", label: "Không chuẩn Unicode", test: (t) => this.editable(t) && TEXT_FIELDS.some((f) => { const v = this.val(t, f); return v !== v.normalize("NFC"); }) },
-    { key: "aa", label: "Album Artist lệch giữa các khoá", test: (t) => t.aaMismatch && !this.staged.has(K(t.path, AA_SYNC)) && !this.isPending(t, "albumartist") },
-    { key: "riff", label: "WAV: RIFF INFO lệch", test: (t) => t.riffMismatch && !this.staged.has(K(t.path, RIFF_SYNC)) },
+    { key: "noaa", label: "Thiếu Album Artist", test: this.flag("noaa") },
+    { key: "noalbum", label: "Thiếu Album", test: this.flag("noalbum") },
+    { key: "notrack", label: "Thiếu Track", test: this.flag("notrack") },
+    { key: "noart", label: "Thiếu ảnh bìa", test: this.flag("noart") },
+    { key: "incons", label: "Album không đồng nhất", test: (t) => this.editable(t) && this.dirInconsistent(t.dir) },
+    { key: "placeholder", label: "Giá trị giữ chỗ", test: this.flag("placeholder") },
+    { key: "space", label: "Có khoảng trắng thừa", test: this.flag("space") },
+    { key: "nfd", label: "Không chuẩn Unicode", test: this.flag("nfd") },
+    { key: "aa", label: "Album Artist lệch giữa các khoá", test: this.flag("aa") },
+    { key: "riff", label: "WAV: RIFF INFO lệch", test: this.flag("riff") },
     { key: "readonly", label: "Không hỗ trợ sửa", test: (t) => t.readonly },
   ];
 
+  /** Kept for callers that pass a context; folder results come from dirInconsistent. */
   filterCtx(): FilterCtx {
-    const m = new Map<string, { a: Set<string>; aa: Set<string> }>();
+    return { inconsistent: { has: (d: string) => this.dirInconsistent(d) } as unknown as Set<string> };
+  }
+
+  /** Counts for every quick filter in one pass (sidebar), cached per store version. */
+  counts(): Map<string, number> {
+    if (this.countsCache?.v === this.version) return this.countsCache.counts;
+    const m = new Map<string, number>(this.quickFilters.map((f) => [f.key, 0]));
+    const inc = (k: string) => m.set(k, m.get(k)! + 1);
+    const keys = this.rowTests.map(([k]) => k);
     for (const t of this.tracks) {
-      if (!this.editable(t)) continue;
-      const s = m.get(t.dir) ?? { a: new Set(), aa: new Set() };
-      s.a.add(this.val(t, "album"));
-      s.aa.add(this.val(t, "albumartist"));
-      m.set(t.dir, s);
+      let b = this.bits(t);
+      for (let i = 0; b; i++, b >>= 1) if (b & 1) inc(keys[i]);
+      if (t.error || this.status.has(t.path)) inc("err");
+      if (t.readonly) inc("readonly");
+      if (this.editable(t) && this.dirInconsistent(t.dir)) inc("incons");
     }
-    return { inconsistent: new Set([...m].filter(([, s]) => s.a.size > 1 || s.aa.size > 1).map(([d]) => d)) };
+    m.set("all", this.tracks.length);
+    this.countsCache = { v: this.version, counts: m };
+    return m;
   }
 
   visible(): TrackRow[] {
     if (this.visibleCache?.v === this.version) return this.visibleCache.rows;
-    const ctx = this.quick === "incons" ? this.filterCtx() : { inconsistent: new Set<string>() };
+    const ctx = this.filterCtx();
     const f = this.quickFilters.find((x) => x.key === this.quick) ?? this.quickFilters[0];
     const q = fold(this.query.trim());
     const folder = this.folder ? this.folder.replace(/\/$/, "") : null;
@@ -237,7 +354,7 @@ class Store {
       (t) =>
         (!folder || t.dir === folder || t.dir.startsWith(folder + "/")) &&
         f.test(t, ctx) &&
-        (!q || ["title", "artist", "album", "albumartist"].some((k) => fold(this.val(t, k)).includes(q)) || fold(t.file).includes(q)),
+        (!q || this.searchText(t).includes(q)),
     );
     if (this.sort) {
       const { field, desc } = this.sort;
