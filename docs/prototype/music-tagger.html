@@ -1,0 +1,1061 @@
+<title>Music Library Tagger v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: tài liệu dọc 4 phần theo 4 bước; phần 3 là cửa sổ app tương tác (bảng = spreadsheet thay thế Google Sheet) */
+:root{
+  --bg:#ECEEF1; --surface:#FFFFFF; --surface-2:#F4F5F7; --line:#D8DCE1; --line-2:#E7EAEE;
+  --fg:#1A1E24; --muted:#636C77; --accent:#0B6868; --accent-fg:#FFFFFF; --accent-soft:#D9EEEC;
+  --pending:#FFE6A0; --pending-fg:#6F4E00; --sel:#D5E4FA; --sel-pending:#F3DB98;
+  --range:rgba(11,104,104,.13); --danger:#B42318; --danger-soft:#FBE9E7; --ok:#18774A; --ok-soft:#E1F3E9; --warn:#9A5B00;
+  --shadow:0 1px 2px rgba(20,30,40,.06),0 8px 28px rgba(20,30,40,.08);
+  --f-display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14171B; --surface:#1C2026; --surface-2:#181B20; --line:#2E343C; --line-2:#262B32;
+  --fg:#E5E8EC; --muted:#8F98A3; --accent:#52B6B0; --accent-fg:#0D1B1B; --accent-soft:#1B3433;
+  --pending:#4A3A10; --pending-fg:#F3C75E; --sel:#22344C; --sel-pending:#5A4716;
+  --range:rgba(82,182,176,.18); --danger:#F57A6E; --danger-soft:#3A1F1C; --ok:#4FC58C; --ok-soft:#163226; --warn:#E3A23A;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.35); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14171B; --surface:#1C2026; --surface-2:#181B20; --line:#2E343C; --line-2:#262B32;
+  --fg:#E5E8EC; --muted:#8F98A3; --accent:#52B6B0; --accent-fg:#0D1B1B; --accent-soft:#1B3433;
+  --pending:#4A3A10; --pending-fg:#F3C75E; --sel:#22344C; --sel-pending:#5A4716;
+  --range:rgba(82,182,176,.18); --danger:#F57A6E; --danger-soft:#3A1F1C; --ok:#4FC58C; --ok-soft:#163226; --warn:#E3A23A;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.35); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.55;padding-inline:20px;padding-block:0 64px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:clamp(28px,4vw,40px);font-weight:700;letter-spacing:-.01em}
+h2{font-size:26px;font-weight:700}
+h3{font-size:17px;font-weight:600;font-family:var(--f-body)}
+p{margin:0}
+a{color:var(--accent)}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+.wrap{max-width:1240px;margin-inline:auto}
+.prose{max-width:72ch}
+.stack{display:flex;flex-direction:column;gap:14px}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* header + nav */
+header.top{padding-block:40px 20px;display:flex;flex-direction:column;gap:12px}
+header.top p{color:var(--muted);max-width:70ch}
+nav.steps{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);border-bottom:1px solid var(--line);display:flex;gap:4px;overflow-x:auto;padding-block:8px}
+nav.steps a{flex:none;text-decoration:none;color:var(--fg);padding:6px 12px;border-radius:6px;font-size:14px;display:flex;gap:8px;align-items:center}
+nav.steps a:hover{background:var(--surface)}
+nav.steps b{font-family:var(--f-mono);font-weight:500;color:var(--accent)}
+section.part{padding-block:44px 8px;display:flex;flex-direction:column;gap:20px;scroll-margin-top:56px}
+.part-head{display:flex;flex-direction:column;gap:6px}
+
+/* generic tables */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table.doc{border-collapse:collapse;width:100%;font-size:14px}
+table.doc th,table.doc td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line-2);vertical-align:top}
+table.doc th{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--surface-2)}
+table.doc tr:last-child td{border-bottom:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.grid2>*{min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:10px}
+.card ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:2px 8px;border-radius:999px;font-weight:500;white-space:nowrap}
+.pill.a{background:var(--danger-soft);color:var(--danger)}
+.pill.b{background:var(--accent-soft);color:var(--accent)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.pend{background:var(--pending);color:var(--pending-fg)}
+.stat-row{display:flex;flex-wrap:wrap;gap:28px}
+.stat{display:flex;flex-direction:column}
+.stat b{font-family:var(--f-display);font-size:30px;font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;color:var(--muted)}
+
+/* ========== APP WINDOW ========== */
+.app-scroll{overflow-x:auto;padding-bottom:6px}
+.app{min-width:1080px;height:680px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);display:grid;grid-template-rows:40px 1fr 44px;overflow:hidden;font-size:13px;position:relative}
+.titlebar{display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.lights{display:flex;gap:7px}.lights i{width:11px;height:11px;border-radius:50%;background:var(--line)}
+.tb-title{font-weight:600;font-size:13px;margin-right:8px}
+.tb-btn{font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:4px 10px;border-radius:6px;cursor:pointer;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.tb-btn:hover{border-color:var(--accent)}
+.tb-btn:disabled{opacity:.45;cursor:default;border-color:var(--line)}
+.tb-btn kbd{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.tb-btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.tb-btn.primary:disabled{background:var(--line);border-color:var(--line);color:var(--muted)}
+.tb-spacer{flex:1}
+.search{font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:4px 10px;border-radius:6px;width:220px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+.body3{display:grid;grid-template-columns:218px 1fr 286px;min-height:0}
+.side{background:var(--surface-2);border-right:1px solid var(--line);overflow:auto;padding:10px 8px;display:flex;flex-direction:column;gap:14px}
+.side h4{margin:0 8px 4px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.side-item{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:5px;cursor:pointer;color:var(--fg);border:0;background:none;font:inherit;font-size:12.5px;width:100%;text-align:left}
+.side-item:hover{background:var(--line-2)}
+.side-item.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.side-item .cnt{margin-left:auto;font-family:var(--f-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.side-item.on .cnt{color:var(--accent)}
+.side-item .ind{width:12px;flex:none;color:var(--muted)}
+.side-item.lvl2{padding-left:24px}
+.src-status{font-size:11px;color:var(--ok);margin-left:auto}
+
+.center{display:flex;flex-direction:column;min-width:0;min-height:0}
+.grid-scroll{overflow:auto;flex:1}
+table.tracks{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px;table-layout:fixed}
+table.tracks th{position:sticky;top:0;background:var(--surface);z-index:2;text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.tracks td{padding:0 8px;height:28px;border-bottom:1px solid var(--line-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+table.tracks td.num{font-variant-numeric:tabular-nums;text-align:right}
+table.tracks td.ro{color:var(--muted)}
+table.tracks td.fn{font-family:var(--f-mono);font-size:11.5px}
+table.tracks tr.sel td{background:var(--sel)}
+table.tracks td.pend{background:var(--pending);color:var(--pending-fg);font-weight:500}
+table.tracks tr.sel td.pend{background:var(--sel-pending)}
+table.tracks tr.err td{color:var(--muted);font-style:italic}
+table.tracks td.empty::after{content:"—";color:var(--line)}
+table.tracks td{position:relative}
+table.tracks td[data-k]{cursor:cell}
+table.tracks td.c-in{background-image:linear-gradient(var(--range),var(--range))}
+table.tracks td.c-fill{background-image:repeating-linear-gradient(135deg,var(--range) 0 4px,transparent 4px 8px)}
+.fh{position:absolute;right:0;bottom:0;width:8px;height:8px;background:var(--accent);border:1.5px solid var(--surface);cursor:crosshair;z-index:1}
+.fillopt{display:inline-flex;gap:4px;align-items:center;font-size:12px;color:var(--muted);margin-left:12px}
+.chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+table.tracks td input{width:100%;font:inherit;border:1px solid var(--accent);border-radius:3px;padding:2px 4px;background:var(--surface);color:var(--fg)}
+table.tracks td input.bad{border-color:var(--danger)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot.pend{background:var(--pending-fg)}
+.dot.err{background:var(--danger)}
+.dot.conf{background:var(--warn);box-shadow:0 0 0 2px var(--surface),0 0 0 3px var(--warn)}
+.group-row td{background:var(--surface-2)!important;font-weight:600;font-size:11.5px;color:var(--muted);height:26px;font-style:normal!important}
+
+.insp{border-left:1px solid var(--line);overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px;background:var(--surface)}
+.insp h5{margin:0;font-size:13px;font-weight:600}
+.insp .sub{color:var(--muted);font-size:11.5px;word-break:break-all;font-family:var(--f-mono)}
+.art{aspect-ratio:1;max-width:100%;border-radius:8px;display:grid;place-items:center;text-align:center;font-family:var(--f-display);font-weight:700;font-size:20px;color:#fff;padding:12px;background:linear-gradient(135deg,#0B6868,#2E4B7A)}
+.art.none{background:var(--surface-2);border:1px dashed var(--line);color:var(--muted);font-family:var(--f-body);font-size:12px;font-weight:400;display:flex;flex-direction:column;gap:8px;justify-content:center;align-items:center}
+.fld{display:flex;flex-direction:column;gap:3px}
+.fld label{font-size:11px;color:var(--muted);font-weight:600;display:flex;justify-content:space-between;gap:6px}
+.fld input,.fld select{font:inherit;font-size:12.5px;border:1px solid var(--line);border-radius:5px;padding:5px 7px;background:var(--surface);color:var(--fg);width:100%;min-width:0}
+.fld input.pend{background:var(--pending);color:var(--pending-fg);border-color:var(--pending-fg)}
+.fld input::placeholder{color:var(--muted);font-style:italic}
+.fld .orig{font-size:11px;color:var(--muted);text-decoration:line-through}
+.fld .err{font-size:11px;color:var(--danger)}
+.fld-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font:inherit;font-size:11px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg);border-radius:999px;padding:1px 8px;cursor:pointer}
+.chip:hover{border-color:var(--accent)}
+.act{font-size:11px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--fg);padding:1px 3px}
+.ro-info{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:11.5px}
+.ro-info dt{color:var(--muted)}.ro-info dd{margin:0;font-variant-numeric:tabular-nums}
+.errbox{background:var(--danger-soft);color:var(--danger);border-radius:6px;padding:8px 10px;font-size:12px}
+.confbox{background:var(--pending);color:var(--pending-fg);border-radius:6px;padding:8px 10px;font-size:12px;display:flex;flex-direction:column;gap:6px}
+
+.actionbar{border-top:1px solid var(--line);background:var(--surface-2);display:flex;align-items:center;gap:10px;padding:0 12px}
+.ab-count{font-size:12.5px;font-variant-numeric:tabular-nums}
+.ab-count b{color:var(--pending-fg);background:var(--pending);padding:1px 6px;border-radius:4px}
+.progress{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.bar{width:160px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);width:0}
+
+/* modal inside app */
+.modal-bg{position:absolute;inset:0;background:rgba(15,20,25,.35);display:grid;place-items:center;z-index:30}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);width:min(820px,94%);max-height:90%;display:flex;flex-direction:column;overflow:hidden}
+.modal header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.modal header h5{margin:0;font-size:15px;font-weight:600}
+.modal .mbody{padding:14px 16px;overflow:auto;display:flex;flex-direction:column;gap:12px;min-height:0}
+.modal footer{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center;background:var(--surface-2)}
+.form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.form-grid .wide{grid-column:span 2}
+.checkline{display:flex;gap:6px;align-items:center;font-size:12.5px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line)}
+.tabs button{font:inherit;font-size:12.5px;border:0;background:none;color:var(--muted);padding:6px 12px;cursor:pointer;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
+table.diff{border-collapse:collapse;width:100%;font-size:12.5px}
+table.diff td,table.diff th{padding:5px 8px;border-bottom:1px solid var(--line-2);text-align:left;vertical-align:top}
+table.diff th{font-size:11px;color:var(--muted);font-weight:600}
+table.diff tr.dir td{background:var(--surface-2);font-weight:600;font-size:12px}
+table.diff tr.file td{font-family:var(--f-mono);font-size:11.5px;color:var(--muted)}
+.old{color:var(--muted);text-decoration:line-through}
+.new{background:var(--pending);color:var(--pending-fg);padding:0 3px;border-radius:3px}
+.hl{background:var(--pending);color:var(--pending-fg);border-radius:2px}
+.nomatch{color:var(--danger);font-size:11.5px}
+.report-stats{display:flex;gap:24px}
+.report-stats div{display:flex;flex-direction:column}
+.report-stats b{font-family:var(--f-display);font-size:26px;font-variant-numeric:tabular-nums}
+.report-stats span{font-size:12px;color:var(--muted)}
+.toast{position:absolute;right:16px;bottom:56px;background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:12.5px;z-index:40;box-shadow:var(--shadow);max-width:420px}
+
+.hint-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px 20px;font-size:14px}
+.hint-list div{display:flex;gap:10px}
+.hint-list kbd{font-family:var(--f-mono);font-size:12px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 5px;height:fit-content;white-space:nowrap}
+
+/* flows */
+.flow-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.flow-card pre.mermaid{margin:0;overflow-x:auto;background:transparent;text-align:center}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:13px;color:var(--muted)}
+
+/* tech */
+.score{display:inline-flex;gap:2px}
+.score i{width:9px;height:9px;border-radius:2px;background:var(--line)}
+.score i.on{background:var(--accent)}
+.rec{border:2px solid var(--accent);background:var(--surface);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.rec h3{font-family:var(--f-display);font-size:22px}
+.layers{display:flex;flex-direction:column;gap:8px}
+.layer{display:grid;grid-template-columns:170px 1fr;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:14px}
+.layer>*{min-width:0}
+.layer b{font-weight:600}
+@media (max-width:640px){.layer{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <span class="eyebrow">music-library-tagger · đề xuất v2 · 01/10/2026</span>
+  <h1>Music Library Tagger v2</h1>
+  <p>Đưa toàn bộ quy trình sửa tag về một ứng dụng desktop: quét thư viện, rà soát và sửa hàng loạt ngay trong bảng, xem trước rồi ghi an toàn có hoàn tác. Không còn Google Sheet hay Excel. Tài liệu gồm 4 phần theo đúng 4 bước đã thống nhất. Bản spec đầy đủ nằm trong thư mục <code>docs/</code> của repo.</p>
+</header>
+<nav class="steps" aria-label="Các phần">
+  <a href="#hientrang"><b>1</b>Spec hiện trạng</a>
+  <a href="#specmoi"><b>2</b>Spec mới</a>
+  <a href="#prototype"><b>3</b>Prototype &amp; luồng</a>
+  <a href="#kythuat"><b>4</b>Đề xuất kỹ thuật</a>
+</nav>
+
+<!-- ================= 1 ================= -->
+<section class="part" id="hientrang">
+  <div class="part-head"><span class="eyebrow">Bước 1</span><h2>Spec các tính năng đang có</h2></div>
+  <p class="prose">Hiện tại app là bộ script dòng lệnh. Mỗi lần chạy, người dùng phải sửa đường dẫn và tham số ngay trong file. Luồng chính đi vòng qua Google Sheet: quét ra sheet, nhân bản sheet, sửa tay, rồi so theo <em>vị trí dòng</em> để ghi ngược vào file.</p>
+  <div class="tbl-wrap"><table class="doc">
+    <thead><tr><th>Tính năng</th><th>Làm gì</th><th>Điểm yếu chính</th></tr></thead>
+    <tbody>
+      <tr><td>Quét &amp; xuất tag</td><td>Duyệt đệ quy, ghi 12 cột tag lên một trang Google Sheet mới (hoặc file Excel), mỗi lô 100 dòng</td><td>Quét lại cùng thư mục thì lỗi trùng trang. Bản Excel nhiều khả năng không lưu được file. File lỗi bị bỏ qua mà không báo.</td></tr>
+      <tr><td>Gán tag</td><td>Ghi đè Album, Album Artist, Genre cho cả thư mục</td><td>Chỉ 3 trường. Không xem trước, không hoàn tác.</td></tr>
+      <tr><td>Tìm &amp; thay</td><td>Trên 1 trường: khớp kiểu "bắt đầu bằng", nhưng lại thay <em>mọi</em> lần xuất hiện. Có chế độ xem trước.</td><td>"16 / 16 / X" thành "X" (thay quá tay)</td></tr>
+      <tr><td>Đồng bộ từ sheet</td><td>So trang gốc với bản sao đã sửa trên 7 trường, rồi ghi file. Trang lỗi chứa các file ghi thất bại.</td><td><b>Ghép theo vị trí dòng</b>: sort hay lọc trên sheet là thay đổi bị bỏ qua im lặng</td></tr>
+      <tr><td>Chuyển sang "Good"</td><td>Chuyển thư mục có thay đổi sang "Staging/Good"</td><td>Lỗi khi danh sách có cả thư mục cha và con</td></tr>
+      <tr><td>Dọn .cue/.ape</td><td>Đưa .flac/.ape cùng tên .cue vào Thùng rác, và mọi file đuôi "ape"</td><td><b>Bỏ cả .ape đơn lẻ</b>, có thể là bản duy nhất của album. Không xem trước.</td></tr>
+      <tr><td>Khung GUI / web</td><td>Cửa sổ PyQt6 2 tab, trang Flask, mẫu PySimpleGUI</td><td>Chưa nối chức năng. Nút chọn file output gây lỗi.</td></tr>
+      <tr><td>Tiện ích phụ</td><td>Crawl blog, liệt kê thư mục Fshare</td><td>Ngoài phạm vi quản lý tag</td></tr>
+    </tbody></table></div>
+  <div class="stat-row">
+    <div class="stat"><b>6</b><span>file features (as-built)</span></div>
+    <div class="stat"><b>36</b><span>quy tắc nghiệp vụ</span></div>
+    <div class="stat"><b>12</b><span>GAP hành vi (A/B)</span></div>
+  </div>
+</section>
+
+<!-- ================= 2 ================= -->
+<section class="part" id="specmoi">
+  <div class="part-head"><span class="eyebrow">Bước 2</span><h2>Spec mới: mọi thứ diễn ra trong app</h2></div>
+  <p class="prose">Bảng track trong app đóng vai trò spreadsheet. Ba nguyên tắc xuyên suốt: <b>sửa chỉ tạo thay đổi chờ</b> (chưa đụng tới file); <b>mọi lượt ghi phải qua Xem trước</b>, được sao lưu trước khi ghi và đọc lại để xác minh; <b>mọi lượt ghi đều hoàn tác được</b>. File được định danh bằng đường dẫn đầy đủ, không bao giờ dựa vào vị trí dòng.</p>
+  <div class="grid2">
+    <div class="card"><h3>Thư viện</h3><ul>
+      <li>Nhiều nguồn (kể cả NAS). Chỉ mục cục bộ giúp mở lại tức thì.</li>
+      <li>Quét chạy nền, tăng dần (chỉ đọc lại file đã đổi), huỷ được.</li>
+      <li>Bộ lọc rà soát: thiếu tag, album không đồng nhất, khoảng trắng thừa, Unicode tách dấu.</li>
+    </ul></div>
+    <div class="card"><h3>Sửa tag</h3><ul>
+      <li>Bảng như Excel: chọn vùng ô, kéo điền (sao chép hoặc chuỗi số), ⌘C/⌘V qua lại với Excel, ⌘↵ nhập cho cả vùng.</li>
+      <li>Sửa nhiều file: "(nhiều giá trị)" kèm hành động Giữ nguyên / Đặt / Xoá.</li>
+      <li>Tìm &amp; thay 5 kiểu khớp; regex có nhóm bắt $1, $&lt;ten&gt;; mẫu đã lưu; xem trước ngay khi gõ.</li>
+      <li>Tag từ tên file, đánh số track, chuẩn hoá chữ hoa, ảnh bìa.</li>
+    </ul></div>
+    <div class="card"><h3>Ghi an toàn</h3><ul>
+      <li>Xem trước theo file hoặc theo trường, bỏ chọn từng mục.</li>
+      <li>Nhật ký giá trị gốc, phát hiện xung đột, ghi trọn vẹn, đọc lại xác minh.</li>
+      <li>Lỗi một file không dừng cả lượt. Có báo cáo cuối lượt.</li>
+    </ul></div>
+    <div class="card"><h3>Lịch sử &amp; tổ chức file</h3><ul>
+      <li>Hoàn tác cả lượt, một phần, hoặc sau nhiều ngày.</li>
+      <li>Chuyển thư mục giữ cấu trúc; chặn khi còn thay đổi chưa áp dụng.</li>
+      <li>Dọn .flac/.ape nguyên khối chỉ khi bản tách track đủ số track trong .cue.</li>
+    </ul></div>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><b>23</b><span>feature (APP-*)</span></div>
+    <div class="stat"><b>67</b><span>quy tắc, 6 domain</span></div>
+    <div class="stat"><b>19</b><span>tiêu chí chấp nhận</span></div>
+    <div class="stat"><b>6</b><span>điểm cần quyết định (GAP-013…018)</span></div>
+  </div>
+  <div class="tbl-wrap"><table class="doc">
+    <thead><tr><th>Cần anh/chị quyết định</th><th>Đề xuất mặc định</th></tr></thead>
+    <tbody>
+      <tr><td>Đổi tên file/thư mục theo tag có trong v2?</td><td>Để bản sau; v2 tập trung vào tag</td></tr>
+      <tr><td>Tra cứu online (MusicBrainz/Discogs)?</td><td>Để bản sau</td></tr>
+      <tr><td>Nhiều nghệ sĩ: chuỗi có dấu phân cách, hay tag đa giá trị?</td><td>Chuỗi có dấu "; "</td></tr>
+      <tr><td>DSD: chỉ DSF (DFF/ISO không có tag chuẩn)?</td><td>Chỉ DSF</td></tr>
+      <tr><td>Lưu giữ lịch sử</td><td>90 ngày / 200 lượt</td></tr>
+      <tr><td>Thùng rác trên NAS</td><td>Thư mục ".mlt-trash" ở gốc nguồn</td></tr>
+    </tbody></table></div>
+</section>
+
+<!-- ================= 3 ================= -->
+<section class="part" id="prototype">
+  <div class="part-head"><span class="eyebrow">Bước 3</span><h2>Prototype tương tác</h2></div>
+  <p class="prose">Dữ liệu dưới đây là mẫu (3 album trong thư mục Staging). Mọi thao tác chỉ chạy trong trình duyệt, không đụng tới file nào. Thử theo đúng luồng: lọc ra vấn đề, sửa hàng loạt, xem trước, áp dụng (có 1 xung đột được giả lập), rồi hoàn tác.</p>
+  <div class="hint-list">
+    <div><kbd>Nhấp đúp</kbd><span>sửa ô; Enter lưu và xuống dòng, Esc huỷ</span></div>
+    <div><kbd>⇧ / ⌘ + nhấp</kbd><span>chọn nhiều dòng, inspector chuyển sang Sửa nhiều file</span></div>
+    <div><kbd>⌘Z · ⇧⌘Z</kbd><span>hoàn tác / làm lại thao tác sửa</span></div>
+    <div><kbd>⌘S</kbd><span>mở Xem trước &amp; áp dụng</span></div>
+    <div><kbd>Kéo ■</kbd><span>kéo ô vuông ở góc vùng để điền; nhấp đúp để điền tới cuối thư mục; giữ ⌥ khi thả để đảo sao chép/chuỗi số</span></div>
+    <div><kbd>⌘C · ⌘V</kbd><span>sao chép/dán vùng ô, qua lại được với Excel và Google Sheets</span></div>
+    <div><kbd>⌘↵ · ⌘D · ⌫</kbd><span>nhập cho cả vùng · điền xuống · xoá giá trị vùng</span></div>
+    <div><kbd>Gõ phím</kbd><span>sửa ngay ô đang đứng; mũi tên để di chuyển, ⇧+mũi tên để mở rộng vùng</span></div>
+  </div>
+  <div class="app-scroll">
+  <div class="app" id="app" tabindex="-1">
+    <div class="titlebar">
+      <span class="lights"><i></i><i></i><i></i></span>
+      <span class="tb-title">Music Library Tagger</span>
+      <button class="tb-btn" id="bUndo" title="Hoàn tác (⌘Z)">↶ Hoàn tác</button>
+      <button class="tb-btn" id="bRedo" title="Làm lại (⇧⌘Z)">↷</button>
+      <span class="tb-spacer"></span>
+      <button class="tb-btn" id="bReplace">Tìm &amp; thay <kbd>⇧⌘H</kbd></button>
+      <button class="tb-btn" id="bPattern">Tag từ tên file</button>
+      <button class="tb-btn" id="bNumber">Đánh số track</button>
+      <button class="tb-btn" id="bClean">Dọn khoảng trắng</button>
+      <input class="search" id="search" type="search" placeholder="Tìm title, artist, album…" aria-label="Tìm kiếm">
+    </div>
+    <div class="body3">
+      <aside class="side" id="side"></aside>
+      <div class="center">
+        <div class="grid-scroll" id="gridScroll"><table class="tracks" id="grid"></table></div>
+      </div>
+      <aside class="insp" id="insp"></aside>
+    </div>
+    <div class="actionbar" id="actionbar"></div>
+    <div id="modalHost"></div>
+    <div id="toastHost"></div>
+  </div>
+  </div>
+
+  <div class="part-head" style="margin-top:28px"><h2>Mô hình luồng hoạt động</h2>
+    <p class="prose" style="color:var(--muted)">Toàn bộ luồng: đọc tag, sửa hàng loạt, ghi tag. Mã quy tắc (APP-…) trỏ tới spec trong <code>docs/business-rules/app/</code>.</p></div>
+
+  <div class="flow-card">
+    <h3>A. Toàn luồng: đọc, sửa, ghi</h3>
+<pre class="mermaid">
+flowchart LR
+  subgraph READ["1 · Đọc tag"]
+    A1([Thêm thư mục nguồn]) --> A2[Liệt kê nhanh<br/>đếm tổng file]
+    A2 --> A3{File đã có trong chỉ mục<br/>và không đổi?}
+    A3 -- Có --> A5
+    A3 -- Không / mới --> A4[Đọc tag song song<br/>lỗi thì đánh dấu 'Lỗi đọc']
+    A4 --> A5[(Chỉ mục cục bộ)]
+  end
+  subgraph EDIT["2 · Sửa hàng loạt"]
+    B1[Bảng track + bộ lọc rà soát] --> B2{Cách sửa}
+    B2 --> B3[Sửa ô / dán cột]
+    B2 --> B4[Sửa nhiều file<br/>Giữ nguyên · Đặt · Xoá]
+    B2 --> B5[Tìm & thay · Tag từ tên file<br/>Đánh số · Chữ hoa · Ảnh bìa]
+    B3 & B4 & B5 --> B6[Chuẩn hoá + kiểm tra<br/>APP-TAG-R4, R6]
+    B6 --> B7[(Thay đổi chờ<br/>lưu bền, có Cmd+Z)]
+  end
+  subgraph WRITE["3 · Ghi tag"]
+    C1[Xem trước<br/>bỏ chọn từng mục] --> C2[Lượt ghi:<br/>từng file]
+    C2 --> C3[Báo cáo<br/>thành công · lỗi · xung đột]
+    C3 --> C4[(Lịch sử + nhật ký)]
+  end
+  A5 --> B1
+  B7 --> C1
+  C3 -- lỗi / xung đột giữ lại --> B7
+  C4 -- Hoàn tác = thay đổi chờ đảo ngược --> B7
+  C3 -. tuỳ chọn .-> D1[Chuyển thư mục<br/>sang khu đích]
+</pre>
+  </div>
+
+  <div class="grid2">
+  <div class="flow-card">
+    <h3>B. Ghi một file trong lượt áp dụng</h3>
+<pre class="mermaid">
+flowchart TD
+  S([File có thay đổi được chọn]) --> J[Ghi giá trị gốc vào nhật ký]
+  J -->|không lưu được| STOP([Dừng cả lượt])
+  J --> K{mtime + dung lượng<br/>khớp chỉ mục?}
+  K -- Không --> CF[Xung đột<br/>giữ thay đổi chờ]
+  K -- Có --> W[Ghi vào bản tạm<br/>rồi thay thế file gốc]
+  W -->|lỗi| ER[Lỗi ghi<br/>giữ thay đổi chờ]
+  W --> V{Đọc lại:<br/>khớp giá trị mới?}
+  V -- Không --> ER
+  V -- Có --> OK[Cập nhật chỉ mục<br/>trường thành 'Đồng bộ']
+  CF & ER & OK --> N([File tiếp theo · hoặc dừng nếu bấm Huỷ])
+</pre>
+  </div>
+  <div class="flow-card">
+    <h3>C. Trạng thái của một trường tag</h3>
+<pre class="mermaid">
+stateDiagram-v2
+  [*] --> DongBo
+  DongBo: Đồng bộ
+  Cho: Chờ áp dụng
+  DangGhi: Đang ghi
+  Loi: Lỗi ghi
+  XungDot: Xung đột
+  DongBo --> Cho: sửa
+  Cho --> DongBo: bỏ / sửa về giá trị gốc
+  Cho --> DangGhi: Áp dụng
+  DangGhi --> DongBo: ghi + xác minh OK
+  DangGhi --> Loi: lỗi
+  DangGhi --> XungDot: file đổi bên ngoài
+  Loi --> Cho: thử lại
+  XungDot --> Cho: giữ thay đổi của tôi
+  XungDot --> DongBo: lấy giá trị trong file
+</pre>
+  </div>
+  </div>
+
+  <div class="flow-card">
+    <h3>D. Luồng cũ và luồng mới</h3>
+<pre class="mermaid">
+flowchart LR
+  subgraph OLD["Hiện tại"]
+    o1[Sửa path trong script] --> o2[Quét ra Google Sheet] --> o3[Nhân bản sheet<br/>sửa tay] --> o4[So theo vị trí dòng] --> o5[Ghi file<br/>không sao lưu]
+  end
+  subgraph NEW["v2"]
+    n1[Mở app] --> n2[Quét tăng dần] --> n3[Lọc + sửa hàng loạt<br/>trong bảng] --> n4[Xem trước<br/>theo đường dẫn] --> n5[Ghi có nhật ký<br/>+ hoàn tác]
+  end
+</pre>
+  </div>
+</section>
+
+<!-- ================= 4 ================= -->
+<section class="part" id="kythuat">
+  <div class="part-head"><span class="eyebrow">Bước 4</span><h2>Đề xuất kỹ thuật</h2></div>
+  <p class="prose">Yêu cầu "đẹp, nhẹ, mạnh" cụ thể hoá thành: giao diện hiện đại, tuỳ biến tự do; bộ cài nhỏ, ít RAM; bảng mượt với hơn 50.000 dòng; quét và ghi song song, ổn định trên NAS; đọc/ghi đủ định dạng của thư viện (FLAC, MP3, M4A, APE, WavPack, DSF…).</p>
+  <div class="tbl-wrap"><table class="doc">
+    <thead><tr><th>Phương án</th><th>Đẹp</th><th>Nhẹ</th><th>Mạnh</th><th>Thư viện tag</th><th>Ghi chú</th></tr></thead>
+    <tbody id="techRows"></tbody></table></div>
+  <p style="font-size:13px;color:var(--muted)">Dung lượng và RAM là mức điển hình của một app cỡ này, chỉ để so sánh tương đối.</p>
+
+  <div class="tbl-wrap"><table class="doc">
+    <thead><tr><th>Định dạng trên nas1</th><th style="text-align:right">Số file</th><th style="text-align:right">Tỉ lệ</th><th>Rust (lofty)</th><th>Python (mutagen)</th></tr></thead>
+    <tbody>
+      <tr><td>FLAC</td><td class="mono" style="text-align:right">39.302</td><td class="mono" style="text-align:right">71,7%</td><td><span class="pill ok">có</span></td><td><span class="pill ok">có</span></td></tr>
+      <tr><td>WAV</td><td class="mono" style="text-align:right">12.562</td><td class="mono" style="text-align:right">22,9%</td><td><span class="pill ok">có</span> ID3 + RIFF INFO</td><td><span class="pill ok">có</span></td></tr>
+      <tr><td>DSF</td><td class="mono" style="text-align:right">1.033</td><td class="mono" style="text-align:right">1,9%</td><td><span class="pill a">không</span> tự viết, 2–4 ngày</td><td><span class="pill ok">có</span></td></tr>
+      <tr><td>M4A</td><td class="mono" style="text-align:right">938</td><td class="mono" style="text-align:right">1,7%</td><td><span class="pill ok">có</span></td><td><span class="pill ok">có</span></td></tr>
+      <tr><td>AIFF</td><td class="mono" style="text-align:right">828</td><td class="mono" style="text-align:right">1,5%</td><td><span class="pill ok">có</span></td><td><span class="pill ok">có</span></td></tr>
+      <tr><td>APE</td><td class="mono" style="text-align:right">104</td><td class="mono" style="text-align:right">0,2%</td><td><span class="pill ok">có</span></td><td><span class="pill ok">có</span></td></tr>
+      <tr><td>WMA</td><td class="mono" style="text-align:right">30</td><td class="mono" style="text-align:right">0,05%</td><td><span class="pill a">không</span> chỉ liệt kê</td><td><span class="pill ok">có</span></td></tr>
+    </tbody></table></div>
+  <p class="prose">Đo trên thư viện thật ngày 01/10/2026: 73.111 file, trong đó 54.797 file âm thanh; không có DFF và gần như không có MP3. Riêng <code>lofty</code> phủ 98,1% số file nhạc; thêm module DSF thì phủ 99,95%. Chỉ liệt kê file qua SMB đã mất 212 giây, nên phần quét phải duyệt thư mục song song và cho loại trừ thư mục sao lưu Roon (khoảng 7.400 file không phải nhạc).</p>
+  <div class="rec">
+    <span class="eyebrow">Khuyến nghị</span>
+    <h3>Tauri 2 + lõi Rust + giao diện web (React + Glide Data Grid)</h3>
+    <p class="prose">Lõi Rust lo phần nặng: quét song song, chỉ mục SQLite, ghi có nhật ký. Webview hệ thống lo giao diện: bộ cài khoảng 10 MB, RAM thấp, và tuỳ biến được tới mức thiết kế như prototype ở trên. Trên NAS, nút thắt là I/O; Rust cho phép điều khiển chính xác độ song song (đọc song song, ghi tuần tự theo APP-WRITE-R10) mà không bị GIL cản như Python.</p>
+    <div class="layers">
+      <div class="layer"><b>Giao diện</b><span>React + TypeScript. Bảng dùng <b>Glide Data Grid</b>: vẽ bằng canvas, mượt với hàng trăm nghìn dòng, có sẵn chọn vùng ô, nút kéo điền và sao chép/dán dạng tab (tương thích Excel). Phần điền chuỗi số và quy tắc bỏ qua dòng ẩn/lỗi (APP-STAGE-R16, R17) viết thêm. CSS tokens cho chế độ sáng/tối.</span></div>
+      <div class="layer"><b>Cầu nối</b><span>Tauri commands (gọi lệnh) và events/channels (stream tiến độ quét/ghi, từng lô 500 dòng).</span></div>
+      <div class="layer"><b>Lõi Rust</b><span>Crate <code>lofty</code> đọc/ghi tag. <code>fancy-regex</code> cho tìm &amp; thay: crate <code>regex</code> chuẩn không có lookahead/lookbehind. <code>walkdir</code> + <code>rayon</code> cho quét song song. <code>rusqlite</code> lưu chỉ mục, thay đổi chờ, lịch sử. <code>trash</code> cho Thùng rác. <code>unicode-normalization</code> cho NFC.</span></div>
+      <div class="layer"><b>Ghi an toàn</b><span>Ghi nhật ký vào SQLite trước khi ghi file. Ghi sang bản tạm cùng thư mục rồi đổi tên thay thế (atomic). File lớn hơn 500 MB thì ghi tại chỗ, có nhật ký. Sau cùng đọc lại để xác minh.</span></div>
+      <div class="layer"><b>Đóng gói</b><span>.dmg (macOS, universal) và .msi (Windows). Tự cập nhật qua Tauri updater.</span></div>
+    </div>
+    <p class="prose"><b>Spike đã chạy (01/10/2026):</b> ghi an toàn với FLAC, WAV, DSF, APE, M4A, AIFF trên bản sao file thật; dữ liệu âm thanh không đổi; không mất tag khi dùng API riêng từng định dạng, crate <code>id3</code>, và hai module tự viết (DSF, RIFF INFO). Glide Data Grid đáp ứng kéo điền tuỳ biến. Đọc tag qua SMB chỉ được 15–22 file/giây, nên quét lần đầu khoảng 45 phút và phải tiếp tục được sau khi thoát app. Còn lại: thử ghi trực tiếp trên NAS.</p>
+  </div>
+  <div class="card">
+    <h3>Phương án dự phòng: PySide6 + mutagen (giữ Python)</h3>
+    <p>Phù hợp khi muốn ra bản dùng được nhanh nhất và tận dụng code cũ. <code>mutagen</code> hỗ trợ đủ mọi định dạng, kể cả DSF, WMA, APE. Bảng dùng <code>QAbstractTableModel</code> (ảo hoá sẵn); tác vụ nền dùng <code>QThreadPool</code>. Đổi lại: bộ cài 80–150 MB, và muốn đẹp như prototype phải tốn công viết QSS hoặc QML.</p>
+  </div>
+  <div class="tbl-wrap"><table class="doc">
+    <thead><tr><th>Giai đoạn</th><th>Phạm vi</th><th>Ước lượng</th></tr></thead>
+    <tbody>
+      <tr><td>0. Spike</td><td>lofty trên mẫu thật (FLAC/MP3/M4A/APE/DSF), đo tốc độ quét NAS, ghi atomic</td><td>2–3 ngày</td></tr>
+      <tr><td>1. Đọc</td><td>Nguồn, quét tăng dần, chỉ mục, bảng ảo hoá, bộ lọc, inspector</td><td>1,5 tuần</td></tr>
+      <tr><td>2. Sửa</td><td>Thay đổi chờ, sửa ô và sửa nhiều file, tìm &amp; thay, tag từ tên file, đánh số, undo/redo</td><td>2 tuần</td></tr>
+      <tr><td>3. Ghi</td><td>Xem trước, lượt ghi, xung đột, xác minh, báo cáo, lịch sử và hoàn tác</td><td>1,5 tuần</td></tr>
+      <tr><td>4. Tổ chức file</td><td>Chuyển thư mục, dọn .cue/.ape, cài đặt, đóng gói</td><td>1 tuần</td></tr>
+    </tbody></table></div>
+</section>
+</div>
+
+<script>
+/* ---------- tech table ---------- */
+(function(){
+  const rows=[
+    ["Tauri 2 + Rust + React",5,5,5,"lofty (Rust)","~10 MB · RAM ~120 MB. Bảng kiểu Excel có sẵn (Glide Data Grid). Rủi ro DSF/WMA → cần spike",true],
+    ["PySide6 / PyQt6 + mutagen",3,3,4,"mutagen (đủ định dạng)","~100 MB. Tận dụng code Python. Đẹp cần nhiều công QSS/QML"],
+    ["Electron + Node",5,1,3,"music-metadata (chỉ đọc) / node-taglib","~150 MB · RAM 300 MB+. Ghi tag trên Node yếu"],
+    ["Flutter desktop",4,3,3,"Qua FFI tới TagLib","Ít thư viện tag; bảng lớn phải tự tối ưu"],
+    ["SwiftUI (chỉ macOS)",5,5,4,"TagLib qua bridge","Đẹp nhất trên Mac nhưng khoá vào macOS"],
+    ["Rust thuần (Slint / egui)",3,5,5,"lofty","Nhẹ nhất; khó làm đẹp như web, ít component bảng"],
+  ];
+  const sc=n=>'<span class="score" aria-label="'+n+'/5">'+[1,2,3,4,5].map(i=>'<i class="'+(i<=n?'on':'')+'"></i>').join('')+'</span>';
+  document.getElementById('techRows').innerHTML=rows.map(r=>`<tr><td>${r[6]?'<b>'+r[0]+'</b> <span class="pill b">khuyến nghị</span>':r[0]}</td><td>${sc(r[1])}</td><td>${sc(r[2])}</td><td>${sc(r[3])}</td><td>${r[4]}</td><td>${r[5]}</td></tr>`).join('');
+})();
+
+/* ---------- prototype ---------- */
+const ROOT='/Volumes/Music/Staging';
+const D1='Bolero Tuyển Chọn IV', D2='Khánh Ly - Tình Khúc Trịnh', D3='Mercury Living Presence Vol. 2/CD1';
+const T=[
+ {id:1,dir:D1,file:'01 - Như Quỳnh - Hai Lối Mộng.flac',track:'1',title:'Hai Lối Mộng ft Mạnh Đình',artist:'Như Quỳnh',album:'Bolero 4',albumartist:'',composer:'',year:'2019',genre:'Nhạc vàng',fmt:'FLAC 16/44.1',dur:'4:52',size:'31,8 MB',art:'cover.jpg · 1000×1000'},
+ {id:2,dir:D1,file:'02 - Quang Lê - Sầu Tím Thiệp Hồng.flac',track:'2',title:'Sầu Tím Thiệp Hồng',artist:'Quang Lê; Lệ Quyên',album:'Bolero IV',albumartist:'Various Artists',composer:'',year:'2019',genre:'Nhạc vàng',fmt:'FLAC 16/44.1',dur:'5:31',size:'36,2 MB',art:'cover.jpg · 1000×1000'},
+ {id:3,dir:D1,file:'03 - Mạnh Quỳnh - Chuyện Hoa Sim.flac',track:'',title:'chuyện hoa sim',artist:'Mạnh Quỳnh',album:'',albumartist:'',composer:'',year:'2019',genre:'Bolero',fmt:'FLAC 16/44.1',dur:'6:04',size:'39,9 MB',art:''},
+ {id:4,dir:D1,file:'04 - Phi Nhung - Mùa Mưa Ngâu Nằm Cạnh.flac',track:'4',title:'Mùa Mưa Ngâu Nằm Cạnh',artist:'Phi Nhung',album:'Bolero 4',albumartist:'Various Artists',composer:'',year:'2019',genre:'Nhạc vàng',fmt:'FLAC 16/44.1',dur:'5:12',size:'34,0 MB',art:'cover.jpg · 1000×1000'},
+ {id:5,dir:D1,file:'05 - Trường Vũ - Linh Hồn Tượng Đá.flac',track:'5',title:'Linh Hồn  Tượng Đá ',artist:'Trường Vũ',album:'Bolero 4',albumartist:'',composer:'',year:'',genre:'Nhạc vàng',fmt:'FLAC 16/44.1',dur:'4:40',size:'30,5 MB',art:'cover.jpg · 1000×1000'},
+ {id:6,dir:D1,file:'06 - Hương Lan - Đôi Mắt Người Xưa.flac',track:'6',title:'06. Đôi Mắt Người Xưa',artist:'Hương Lan',album:'Bolero IV',albumartist:'Various Artists',composer:'',year:'2019',genre:'Bolero',fmt:'FLAC 16/44.1',dur:'5:47',size:'37,7 MB',art:'cover.jpg · 1000×1000'},
+ {id:7,dir:D1,file:'07 - Chuyến Tàu Hoàng Hôn.ape',err:'Lỗi đọc: phần đầu file APE không hợp lệ',track:'',title:'',artist:'',album:'',albumartist:'',composer:'',year:'',genre:'',fmt:'APE',dur:'—',size:'28,1 MB',art:''},
+ {id:8,dir:D2,file:'01 - Khánh Ly - Diễm Xưa.flac',track:'1',title:'Diễm Xưa',artist:'Khánh Ly',album:'16 / Tình Khúc Trịnh Công Sơn',albumartist:'Khánh Ly',composer:'Trịnh Công Sơn',year:'',genre:'Nhạc Trịnh',fmt:'FLAC 24/96',dur:'3:58',size:'92,4 MB',art:''},
+ {id:9,dir:D2,file:'02 - Khánh Ly - Hạ Trắng.flac',track:'2',title:'Hạ Trắng [Live 1972]',artist:'Khánh Ly',album:'16 / Tình Khúc Trịnh Công Sơn',albumartist:'Khánh Ly',composer:'Trịnh Công Sơn',year:'',genre:'Nhạc Trịnh',fmt:'FLAC 24/96',dur:'4:21',size:'101,3 MB',art:''},
+ {id:10,dir:D2,file:'03 - Khánh Ly - Biển Nhớ.flac',track:'3',title:'biển nhớ',artist:'Khánh Ly',album:'16 / Tình Khúc Trịnh Công Sơn',albumartist:'Khánh Ly',composer:'Trịnh Công Sơn',year:'',genre:'Nhạc Trịnh',fmt:'FLAC 24/96',dur:'4:47',size:'111,0 MB',art:''},
+ {id:11,dir:D2,file:'04 - Khánh Ly - Ru Ta Ngậm Ngùi.flac',track:'4',title:'Ru Ta Ngậm Ngùi',artist:'Khánh Ly',album:'16 / 16 / Tình Khúc Trịnh Công Sơn',albumartist:'Khánh Ly',composer:'Trịnh Công Sơn',year:'',genre:'Nhạc Trịnh',fmt:'FLAC 24/96',dur:'4:05',size:'95,2 MB',art:''},
+ {id:12,dir:D3,file:'Dvorak Symphony 9 - I. Adagio - Allegro molto.dsf',track:'1',title:'Symphony No. 9: I. Adagio – Allegro molto',artist:'Detroit Symphony Orchestra; Paul Paray',album:'Mercury Living Presence Vol.2',albumartist:'Various Artists',composer:'Antonín Dvořák',year:'1960',genre:'Classical',fmt:'DSF DSD64',dur:'9:41',size:'487,0 MB',art:'folder.jpg · 1400×1400'},
+ {id:13,dir:D3,file:'Dvorak Symphony 9 - II. Largo.dsf',track:'2',title:'Symphony No. 9: II. Largo',artist:'Paray, Paul',album:'Mercury Living Presence Vol. 2',albumartist:'Various Artists',composer:'Antonín Dvořák',year:'1960',genre:'Classical',fmt:'DSF DSD64',dur:'11:52',size:'596,8 MB',art:'folder.jpg · 1400×1400'},
+ {id:14,dir:D3,file:'Dvorak Symphony 9 - III. Scherzo.dsf',track:'3',title:'Symphony No. 9: III. Scherzo',artist:'Detroit Symphony Orchestra; Paul Paray',album:'Mercury Living Presence Vol. 2',albumartist:'',composer:'Antonín Dvořák',year:'1960',genre:'Classical',fmt:'DSF DSD64',dur:'7:39',size:'384,9 MB',art:'folder.jpg · 1400×1400'},
+];
+const byId=new Map(T.map(t=>[t.id,t]));
+const COLS=[
+ {k:'track',label:'#',w:40,num:true},{k:'title',label:'Title',w:190},{k:'artist',label:'Artist',w:150},
+ {k:'album',label:'Album',w:200},{k:'albumartist',label:'Album Artist',w:120},{k:'year',label:'Year',w:52,num:true},{k:'genre',label:'Genre',w:96}];
+const LABEL={track:'Track',tracktotal:'Track Total',title:'Title',artist:'Artist',album:'Album',albumartist:'Album Artist',composer:'Composer',year:'Year',genre:'Genre',art:'Ảnh bìa'};
+const TEXTF=['title','artist','album','albumartist','composer','genre'];
+const INSP=['title','artist','album','albumartist','composer','genre','year','track','tracktotal'];
+
+const S={sel:new Set(),anchor:null,folder:null,filter:'all',q:'',staged:new Map(),undo:[],redo:[],status:new Map(),history:[],conflictUsed:false,busy:null,vis:[],rg:null,fillDrag:null,selDrag:null,lastFill:null};
+const K=(id,k)=>id+'|'+k;
+const val=(t,k)=>{const s=S.staged.get(K(t.id,k));return s?s.v:(t[k]??'')};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtN=n=>n.toLocaleString('vi-VN');
+function norm(v){return String(v).normalize('NFC').replace(/\s+/g,' ').trim()}
+function validate(k,v){
+  if(v==='')return null;
+  if(k==='year'&&!/^\d{4}$/.test(v))return 'Năm phải gồm 4 chữ số';
+  if((k==='track'||k==='tracktotal')&&!(/^\d+$/.test(v)&&+v>=1&&+v<=999))return 'Giá trị phải là số nguyên từ 1 đến 999';
+  return null;
+}
+function crossCheck(t,k,v){
+  const tr=k==='track'?v:val(t,'track'), tt=k==='tracktotal'?v:val(t,'tracktotal');
+  if(tr&&tt&&+tr>+tt)return 'Track không được lớn hơn Track Total';
+  return null;
+}
+/* undo ops */
+let curOp=null;
+function begin(){curOp=[]}
+function commit(label){if(curOp&&curOp.length){S.undo.push({label,ch:curOp});S.redo=[]}curOp=null}
+function setVal(id,k,v,raw){
+  const t=byId.get(id); if(t.err)return false;
+  if(!raw&&k!=='art')v=norm(v);
+  const key=K(id,k), prev=S.staged.has(key)?S.staged.get(key).v:undefined;
+  const orig=t[k]??'';
+  let next = v===orig?undefined:v;
+  if(next===prev)return false;
+  if(next===undefined)S.staged.delete(key);else S.staged.set(key,{v:next});
+  if(curOp)curOp.push({key,prev,next});
+  return true;
+}
+function applyCh(ch,dir){for(const c of (dir<0?[...ch].reverse():ch)){const v=dir<0?c.prev:c.next;if(v===undefined)S.staged.delete(c.key);else S.staged.set(c.key,{v})}}
+function doUndo(){const op=S.undo.pop();if(!op)return;applyCh(op.ch,-1);S.redo.push(op);toast('Đã hoàn tác: '+op.label);render()}
+function doRedo(){const op=S.redo.pop();if(!op)return;applyCh(op.ch,1);S.undo.push(op);toast('Làm lại: '+op.label);render()}
+
+/* filters */
+function dirsInconsistent(){
+  const m=new Map();
+  for(const t of T){if(t.err)continue;const s=m.get(t.dir)||{a:new Set(),aa:new Set()};s.a.add(val(t,'album'));s.aa.add(val(t,'albumartist'));m.set(t.dir,s)}
+  return new Set([...m].filter(([,s])=>s.a.size>1||s.aa.size>1).map(([d])=>d));
+}
+const hasPending=t=>[...S.staged.keys()].some(k=>k.startsWith(t.id+'|'));
+const FILTERS=[
+ {k:'all',label:'Tất cả',fn:()=>true},
+ {k:'pending',label:'Có thay đổi chờ',fn:hasPending},
+ {k:'err',label:'Lỗi',fn:t=>!!t.err||S.status.has(t.id)},
+ {k:'noaa',label:'Thiếu Album Artist',fn:t=>!t.err&&!val(t,'albumartist')},
+ {k:'notrack',label:'Thiếu Track',fn:t=>!t.err&&!val(t,'track')},
+ {k:'noart',label:'Thiếu ảnh bìa',fn:t=>!t.err&&!val(t,'art')},
+ {k:'incons',label:'Album không đồng nhất',fn:(t,ctx)=>!t.err&&ctx.inc.has(t.dir)},
+ {k:'space',label:'Có khoảng trắng thừa',fn:t=>!t.err&&TEXTF.some(k=>{const v=val(t,k);return v!==v.replace(/\s+/g,' ').trim()})},
+];
+function rowsVisible(){
+  const ctx={inc:dirsInconsistent()}; const f=FILTERS.find(f=>f.k===S.filter);
+  const q=S.q.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/gi,'d').toLowerCase();
+  return T.filter(t=>(!S.folder||t.dir===S.folder)&&f.fn(t,ctx)&&(!q||['title','artist','album','albumartist','file'].some(k=>String(k==='file'?t.file:val(t,k)).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/gi,'d').toLowerCase().includes(q))));
+}
+
+/* ---------- render ---------- */
+const $=id=>document.getElementById(id);
+function render(){renderSide();renderGrid();renderInsp();renderBar()}
+function renderSide(){
+  const ctx={inc:dirsInconsistent()};
+  const dirs=[D1,D2,D3];
+  let h=`<div><h4>Nguồn</h4><button class="side-item ${!S.folder?'on':''}" data-folder=""><span class="ind">▾</span>Staging<span class="src-status">● Sẵn sàng</span></button>`;
+  for(const d of dirs){const n=T.filter(t=>t.dir===d).length;h+=`<button class="side-item lvl2 ${S.folder===d?'on':''}" data-folder="${esc(d)}"><span class="ind">▸</span><span style="overflow:hidden;text-overflow:ellipsis">${esc(d.split('/')[0])}</span><span class="cnt">${n}</span></button>`}
+  h+=`</div><div><h4>Rà soát</h4>`;
+  for(const f of FILTERS){const n=T.filter(t=>f.fn(t,ctx)).length;h+=`<button class="side-item ${S.filter===f.k?'on':''}" data-filter="${f.k}">${f.label}<span class="cnt">${n}</span></button>`}
+  h+=`</div><div><h4>Hoạt động</h4><button class="side-item" data-history="1">Lịch sử<span class="cnt">${S.history.length}</span></button></div>`;
+  $('side').innerHTML=h;
+}
+function rgN(){if(!S.rg)return null;const {a,b}=S.rg;return{r0:Math.min(a.r,b.r),r1:Math.max(a.r,b.r),c0:Math.min(a.c,b.c),c1:Math.max(a.c,b.c)}}
+function renderGrid(){
+  const rows=rowsVisible();S.vis=rows.map(t=>t.id);
+  if(S.rg&&(Math.max(S.rg.a.r,S.rg.b.r)>=rows.length))S.rg=null;
+  const R=rgN(), F=S.fillDrag&&S.fillDrag.to!=null&&R?S.fillDrag.to:null;
+  const fr0=F==null?null:(F>R.r1?R.r1+1:F<R.r0?F:null), fr1=F==null?null:(F>R.r1?F:F<R.r0?R.r0-1:null);
+  let h='<colgroup><col style="width:24px"><col style="width:230px">'+COLS.map(c=>`<col style="width:${c.w}px">`).join('')+'<col style="width:96px"><col style="width:58px"></colgroup>';
+  h+='<thead><tr><th></th><th>Tên file</th>'+COLS.map(c=>`<th>${c.label}</th>`).join('')+'<th>Định dạng</th><th>T.lượng</th></tr></thead><tbody>';
+  let lastDir=null;
+  if(!rows.length)h+=`<tr><td colspan="11" style="text-align:center;color:var(--muted);height:80px">Không có track nào khớp · <a href="#" data-clear="1">Xoá bộ lọc</a></td></tr>`;
+  rows.forEach((t,ri)=>{
+    if(t.dir!==lastDir){lastDir=t.dir;h+=`<tr class="group-row"><td></td><td colspan="10">${esc(ROOT+'/'+t.dir)}</td></tr>`}
+    const st=S.status.get(t.id);
+    const dot=t.err?'<span class="dot err" title="Lỗi đọc"></span>':st==='conflict'?'<span class="dot conf" title="Xung đột"></span>':hasPending(t)?'<span class="dot pend" title="Có thay đổi chờ"></span>':'';
+    h+=`<tr data-id="${t.id}" class="${S.sel.has(t.id)?'sel':''} ${t.err?'err':''}"><td>${dot}</td><td class="fn" title="${esc(t.file)}">${esc(t.file)}</td>`;
+    COLS.forEach((c,ci)=>{
+      const v=val(t,c.k),p=S.staged.has(K(t.id,c.k));const cls=[c.num?'num':'',p?'pend':'',v===''?'empty':''];const sh=[];let fh='';
+      if(R&&ri>=R.r0&&ri<=R.r1&&ci>=R.c0&&ci<=R.c1){cls.push('c-in');const e='var(--accent)';
+        if(ri===R.r0)sh.push(`inset 0 2px 0 ${e}`);if(ri===R.r1)sh.push(`inset 0 -2px 0 ${e}`);if(ci===R.c0)sh.push(`inset 2px 0 0 ${e}`);if(ci===R.c1)sh.push(`inset -2px 0 0 ${e}`);
+        if(S.rg.a.r===ri&&S.rg.a.c===ci&&(R.r0!==R.r1||R.c0!==R.c1))sh.push('inset 0 0 0 1px var(--accent)');
+        if(ri===R.r1&&ci===R.c1)fh='<span class="fh" title="Kéo để điền · nhấp đúp để điền tới cuối thư mục · giữ ⌥ để đảo sao chép/chuỗi"></span>'}
+      if(fr0!=null&&ri>=fr0&&ri<=fr1&&ci>=R.c0&&ci<=R.c1){cls.push('c-fill');const e='var(--muted)';
+        if(ri===fr0)sh.push(`inset 0 1px 0 ${e}`);if(ri===fr1)sh.push(`inset 0 -1px 0 ${e}`);if(ci===R.c0)sh.push(`inset 1px 0 0 ${e}`);if(ci===R.c1)sh.push(`inset -1px 0 0 ${e}`)}
+      h+=`<td data-k="${c.k}" class="${cls.join(' ')}"${sh.length?` style="box-shadow:${sh.join(',')}"`:''} title="${esc(v)}">${esc(v)}${fh}</td>`;
+    });
+    h+=`<td class="ro">${esc(t.fmt)}</td><td class="ro num">${esc(t.dur)}</td></tr>`;
+  });
+  $('grid').innerHTML=h+'</tbody>';
+}
+function selTracks(){return T.filter(t=>S.sel.has(t.id))}
+function renderInsp(){
+  const sel=selTracks(); const el=$('insp');
+  if(!sel.length){el.innerHTML=`<p style="color:var(--muted);margin-top:40px;text-align:center">Chọn một track để xem chi tiết.<br><br>Chọn nhiều track để sửa hàng loạt.</p>`;return}
+  if(sel.length===1){
+    const t=sel[0];
+    if(t.err){el.innerHTML=`<h5>${esc(t.file)}</h5><div class="sub">${esc(ROOT+'/'+t.dir)}</div><div class="errbox">${esc(t.err)}. File này không sửa được cho tới khi quét lại thành công.</div>`;return}
+    const art=val(t,'art'),artP=S.staged.has(K(t.id,'art'));
+    let h=art?`<div class="art" style="${artP?'outline:3px solid var(--pending-fg)':''}">${esc(val(t,'album')||'—')}</div><div class="chips"><span style="font-size:11px;color:var(--muted)">${esc(art)}</span><button class="chip" data-artdel="1">Xoá ảnh</button></div>`:`<div class="art none">Không có ảnh bìa<button class="chip" data-artdir="1">Dùng ảnh trong thư mục</button></div>`;
+    if(S.status.get(t.id)==='conflict')h+=`<div class="confbox"><b>Xung đột</b>File đã bị thay đổi bên ngoài app sau lần quét.<span style="display:flex;gap:6px"><button class="chip" data-keep="${t.id}">Giữ thay đổi của tôi</button><button class="chip" data-take="${t.id}">Lấy giá trị trong file</button></span></div>`;
+    h+=`<div><h5>${esc(t.file)}</h5><div class="sub">${esc(ROOT+'/'+t.dir)}</div></div>`;
+    for(const k of INSP){
+      if(k==='track'){h+='<div class="fld-row">'}
+      const v=val(t,k),p=S.staged.has(K(t.id,k));
+      h+=`<div class="fld"><label for="f_${k}">${LABEL[k]}</label><input id="f_${k}" data-f="${k}" value="${esc(v)}" class="${p?'pend':''}">${p?`<span class="orig">${esc(t[k]||'(trống)')}</span>`:''}<span class="err" id="e_${k}"></span></div>`;
+      if(k==='tracktotal'){h+='</div>'}
+    }
+    h+=`<dl class="ro-info"><dt>Định dạng</dt><dd>${esc(t.fmt)}</dd><dt>Thời lượng</dt><dd>${esc(t.dur)}</dd><dt>Dung lượng</dt><dd>${esc(t.size)}</dd></dl>`;
+    el.innerHTML=h;return;
+  }
+  // batch
+  const ok=sel.filter(t=>!t.err), skipped=sel.length-ok.length;
+  let h=`<div><h5>Sửa ${ok.length} file</h5><div style="font-size:11.5px;color:var(--muted)">Chỉ trường đặt hành động khác "Giữ nguyên" mới tạo thay đổi.${skipped?` Bỏ qua ${skipped} file lỗi đọc.`:''}</div></div>`;
+  for(const k of ['album','albumartist','artist','genre','year','composer']){
+    const counts=new Map();ok.forEach(t=>{const v=val(t,k);counts.set(v,(counts.get(v)||0)+1)});
+    const same=counts.size===1, common=same?[...counts.keys()][0]:'';
+    const chips=same?'':[...counts].sort((a,b)=>b[1]-a[1]).slice(0,4).map(([v,n])=>`<button class="chip" data-pick="${k}" data-v="${esc(v)}">${esc(v||'(trống)')} (${n})</button>`).join('');
+    h+=`<div class="fld"><label for="b_${k}">${LABEL[k]}<select class="act" id="ba_${k}" data-ba="${k}" aria-label="Hành động cho ${LABEL[k]}"><option value="keep">Giữ nguyên</option><option value="set">Đặt giá trị</option><option value="clear">Xoá</option></select></label><input id="b_${k}" data-b="${k}" value="${esc(common)}" placeholder="${same?'':'(nhiều giá trị)'}"><div class="chips">${chips}</div><span class="err" id="be_${k}"></span></div>`;
+  }
+  h+=`<button class="tb-btn primary" id="bBatch">Áp vào ${ok.length} file</button>`;
+  el.innerHTML=h;
+}
+function renderBar(){
+  const n=S.staged.size, files=new Set([...S.staged.keys()].map(k=>k.split('|')[0])).size;
+  let left = S.busy? `<div class="progress"><span>${esc(S.busy.text)}</span><div class="bar"><i style="width:${S.busy.pct}%"></i></div><button class="tb-btn" id="bCancel">Huỷ</button></div>`
+    : `<span class="ab-count">${n?`<b>${fmtN(n)} thay đổi</b> trên ${files} file`:'Không có thay đổi chờ'}</span>`;
+  const L=S.lastFill; if(!S.busy&&L&&L.op&&S.undo[S.undo.length-1]===L.op) left+=`<span class="fillopt">Tuỳ chọn điền: <button class="chip ${L.mode==='copy'?'on':''}" data-refill="copy">Sao chép ô</button><button class="chip ${L.mode==='series'?'on':''}" data-refill="series">Điền chuỗi</button></span>`;
+  $('actionbar').innerHTML=`${left}<span class="tb-spacer"></span><button class="tb-btn" id="bScan" ${S.busy?'disabled':''}>Quét lại</button><button class="tb-btn" id="bDiscard" ${n&&!S.busy?'':'disabled'}>Bỏ tất cả</button><button class="tb-btn primary" id="bReview" ${n&&!S.busy?'':'disabled'}>Xem trước &amp; áp dụng (${fmtN(n)}) <kbd style="color:inherit;opacity:.7">⌘S</kbd></button>`;
+  $('bUndo').disabled=!S.undo.length; $('bRedo').disabled=!S.redo.length;
+}
+let toastT;
+function toast(msg){$('toastHost').innerHTML=`<div class="toast" role="status">${esc(msg)}</div>`;clearTimeout(toastT);toastT=setTimeout(()=>$('toastHost').innerHTML='',3200)}
+
+/* ---------- grid interactions (vùng ô kiểu Excel) ---------- */
+const LASTC=()=>COLS.length-1;
+function syncRows(){const R=rgN();if(!R)return;S.sel=new Set(S.vis.slice(R.r0,R.r1+1));S.anchor=S.vis[S.rg.a.r]}
+function cellOf(td){const tr=td.closest('tr[data-id]');if(!tr)return null;return{r:S.vis.indexOf(+tr.dataset.id),c:td.dataset.k?COLS.findIndex(c=>c.k===td.dataset.k):-1}}
+function tdAt(r,c){const tr=$('grid').querySelector(`tr[data-id="${S.vis[r]}"]`);return tr&&tr.querySelector(`td[data-k="${COLS[c].k}"]`)}
+function refresh(){renderGrid();renderInsp();renderBar()}
+$('grid').addEventListener('click',e=>{const a=e.target.closest('[data-clear]');if(a){e.preventDefault();S.filter='all';S.q='';$('search').value='';S.folder=null;S.rg=null;render()}});
+$('grid').addEventListener('mousedown',e=>{
+  if(e.button!==0||e.target.tagName==='INPUT')return;
+  const td=e.target.closest('td');if(!td)return;const pos=cellOf(td);if(!pos)return;
+  e.preventDefault();$('app').focus({preventScroll:true});
+  if(e.target.closest('.fh')){if(e.detail>=2){fillToGroupEnd()}else{S.fillDrag={to:null}}return}
+  const row=pos.c<0;
+  if(e.shiftKey&&S.rg){S.rg.b={r:pos.r,c:row?LASTC():pos.c};if(row)S.rg.a.c=0;syncRows()}
+  else if(e.metaKey||e.ctrlKey){const id=S.vis[pos.r];S.sel.has(id)?S.sel.delete(id):S.sel.add(id);S.rg={a:{r:pos.r,c:row?0:pos.c},b:{r:pos.r,c:row?LASTC():pos.c}};S.anchor=id}
+  else{S.rg={a:{r:pos.r,c:row?0:pos.c},b:{r:pos.r,c:row?LASTC():pos.c}};S.selDrag={row};syncRows()}
+  S.lastFill=null;refresh();
+  if(e.detail===2&&!row){const n=tdAt(pos.r,pos.c);if(n)startEdit(n)}
+});
+$('grid').addEventListener('mouseover',e=>{
+  const td=e.target.closest('td');if(!td)return;const pos=cellOf(td);if(!pos||pos.r<0)return;
+  if(S.fillDrag){if(S.fillDrag.to!==pos.r){S.fillDrag.to=pos.r;renderGrid()}return}
+  if(S.selDrag){const c=S.selDrag.row?LASTC():(pos.c<0?S.rg.b.c:pos.c);if(S.rg.b.r!==pos.r||S.rg.b.c!==c){S.rg.b={r:pos.r,c};syncRows();renderGrid();renderInsp()}}
+});
+document.addEventListener('mouseup',e=>{
+  if(S.fillDrag){const to=S.fillDrag.to;S.fillDrag=null;const R=rgN();if(to!=null&&R&&(to>R.r1||to<R.r0))doFill(to,e.altKey);else renderGrid()}
+  S.selDrag=null;
+});
+const NUMK=new Set(['track','tracktotal','year']);
+function stepOf(src){if(src.length<2||src.some(v=>!/^\d+$/.test(v)))return null;const d=+src[1]-+src[0];for(let i=2;i<src.length;i++)if(+src[i]-+src[i-1]!==d)return null;return d}
+function fillValue(k,src,pos,down,mode){
+  // pos: 1-based distance from the source edge
+  const n=src.length;
+  if(mode==='series'){
+    if(NUMK.has(k)&&src.every(v=>/^\d+$/.test(v))){const st=stepOf(src)??1;return String(down?+src[n-1]+st*pos:+src[0]-st*pos)}
+    const base=down?src[n-1]:src[0],m=base.match(/^(.*?)(\d+)(\D*)$/);
+    if(m)return m[1]+String(Math.max(0,+m[2]+(down?pos:-pos)))+m[3];
+  }
+  return down?src[(pos-1)%n]:src[n-1-((pos-1)%n)];
+}
+function doFill(to,alt,force){
+  const R=rgN();const down=to>R.r1;const targets=[];
+  if(down)for(let r=R.r1+1;r<=to;r++)targets.push(r);else for(let r=R.r0-1;r>=to;r--)targets.push(r);
+  begin();let filled=0,skipped=0;const modes=new Set();
+  for(let c=R.c0;c<=R.c1;c++){
+    const k=COLS[c].k,src=[];for(let r=R.r0;r<=R.r1;r++)src.push(val(byId.get(S.vis[r]),k));
+    let mode=force||((NUMK.has(k)&&stepOf(src)!=null)?'series':'copy');
+    if(!force&&alt)mode=mode==='series'?'copy':'series';
+    modes.add(mode);
+    targets.forEach((r,i)=>{const t=byId.get(S.vis[r]);if(t.err){skipped++;return}
+      const v=fillValue(k,src,i+1,down,mode);if(validate(k,v)||crossCheck(t,k,v)){skipped++;return}
+      setVal(t.id,k,v);filled++});
+  }
+  const before=S.undo.length;commit('Kéo điền');
+  const op=S.undo.length>before?S.undo[S.undo.length-1]:null;
+  S.lastFill={src:{a:{...S.rg.a},b:{...S.rg.b}},to,op,mode:modes.has('series')?'series':'copy'};
+  S.rg=down?{a:{r:R.r0,c:R.c0},b:{r:to,c:R.c1}}:{a:{r:to,c:R.c0},b:{r:R.r1,c:R.c1}};syncRows();
+  toast(filled?`Đã điền ${filled} ô${skipped?`, bỏ qua ${skipped} ô`:''}`:'Không có ô nào được điền');render();
+}
+function refill(mode){
+  const L=S.lastFill;if(!L||!L.op||S.undo[S.undo.length-1]!==L.op)return;
+  S.undo.pop();applyCh(L.op.ch,-1);S.rg={a:{...L.src.a},b:{...L.src.b}};doFill(L.to,false,mode);
+}
+function fillToGroupEnd(){
+  const R=rgN();if(!R)return;const dir=byId.get(S.vis[R.r1]).dir;let to=R.r1;
+  while(to+1<S.vis.length&&byId.get(S.vis[to+1]).dir===dir)to++;
+  if(to>R.r1)doFill(to,false);else toast('Đã ở dòng cuối của thư mục');
+}
+function forRange(fn){const R=rgN();for(let r=R.r0;r<=R.r1;r++)for(let c=R.c0;c<=R.c1;c++)fn(byId.get(S.vis[r]),COLS[c].k,r,c)}
+function setRange(v,label){
+  if(!S.rg)return;begin();let n=0,sk=0;
+  forRange((t,k)=>{const x=norm(v);if(t.err||validate(k,x)||crossCheck(t,k,x)){sk++;return}setVal(t.id,k,x);n++});
+  commit(label);S.lastFill=null;toast(`${label}: ${n} ô${sk?`, bỏ qua ${sk} ô`:''}`);render();
+}
+function fillDownRange(){
+  const R=rgN();if(!R||R.r0===R.r1){toast('Chọn vùng nhiều dòng để điền xuống');return}
+  begin();let n=0,sk=0;
+  for(let c=R.c0;c<=R.c1;c++){const k=COLS[c].k,v=val(byId.get(S.vis[R.r0]),k);for(let r=R.r0+1;r<=R.r1;r++){const t=byId.get(S.vis[r]);if(t.err||validate(k,v)||crossCheck(t,k,v)){sk++;continue}setVal(t.id,k,v);n++}}
+  commit('Điền xuống (⌘D)');toast(`Điền xuống ${n} ô${sk?`, bỏ qua ${sk} ô`:''}`);render();
+}
+function startEdit(td,initial){
+  const pos=cellOf(td);const tr=td.parentElement,id=+tr.dataset.id,k=td.dataset.k,t=byId.get(id);
+  if(t.err){toast('File lỗi đọc, không sửa được');return}
+  const R=rgN();const multi=R&&(R.r0!==R.r1||R.c0!==R.c1)&&pos.r>=R.r0&&pos.r<=R.r1&&pos.c>=R.c0&&pos.c<=R.c1;
+  if(!multi)S.rg={a:{...pos},b:{...pos}};
+  const inp=document.createElement('input');inp.value=initial??val(t,k);td.textContent='';td.classList.remove('empty');td.appendChild(inp);inp.focus();if(initial==null)inp.select();
+  let done=false;
+  const finish=(save,move,all)=>{
+    if(done)return;
+    if(all){done=true;setRange(inp.value,'Nhập cho vùng (⌘↵)');return}
+    if(save){const v=norm(inp.value);const er=validate(k,v)||crossCheck(t,k,v);if(er){inp.classList.add('bad');inp.title=er;toast(er);inp.focus();return}begin();setVal(id,k,v);commit('Sửa '+LABEL[k])}
+    done=true;
+    if(move){const nr=move==='down'?pos.r+1:pos.r,nc=move==='right'?pos.c+1:pos.c;
+      if(nr<S.vis.length&&nc<COLS.length){S.rg={a:{r:nr,c:nc},b:{r:nr,c:nc}};syncRows()}}
+    render();$('app').focus({preventScroll:true});
+  };
+  inp.addEventListener('keydown',ev=>{ev.stopPropagation();
+    if(ev.key==='Enter'&&(ev.metaKey||ev.ctrlKey)){ev.preventDefault();finish(true,null,true)}
+    else if(ev.key==='Enter'){ev.preventDefault();finish(true,'down')}
+    else if(ev.key==='Escape'){finish(false)}
+    else if(ev.key==='Tab'){ev.preventDefault();finish(true,'right')}});
+  inp.addEventListener('blur',()=>finish(true));
+}
+function gridKey(e){
+  if(!S.rg)return false;const m=e.metaKey||e.ctrlKey;
+  const mv={ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1]}[e.key];
+  if(mv&&!m){e.preventDefault();const p=e.shiftKey?S.rg.b:S.rg.a;const r=Math.max(0,Math.min(S.vis.length-1,p.r+mv[0])),c=Math.max(0,Math.min(LASTC(),p.c+mv[1]));
+    if(e.shiftKey)S.rg.b={r,c};else S.rg={a:{r,c},b:{r,c}};syncRows();S.lastFill=null;refresh();tdAt(r,c)?.scrollIntoView({block:'nearest'});return true}
+  if(e.key==='Enter'||e.key==='F2'){e.preventDefault();const n=tdAt(S.rg.a.r,S.rg.a.c);if(n)startEdit(n);return true}
+  if((e.key==='Delete'||e.key==='Backspace')&&!m){e.preventDefault();setRange('','Xoá giá trị');return true}
+  if(m&&e.key.toLowerCase()==='d'){e.preventDefault();fillDownRange();return true}
+  if(e.key.length===1&&!m&&!e.altKey){e.preventDefault();const n=tdAt(S.rg.a.r,S.rg.a.c);if(n)startEdit(n,e.key);return true}
+  return false;
+}
+const inGrid=()=>document.activeElement===$('app')&&!$('modalHost').innerHTML;
+document.addEventListener('copy',e=>{
+  if(!inGrid()||!S.rg)return;const R=rgN();const lines=[];
+  for(let r=R.r0;r<=R.r1;r++){const t=byId.get(S.vis[r]);const row=[];for(let c=R.c0;c<=R.c1;c++)row.push(val(t,COLS[c].k));lines.push(row.join('\t'))}
+  e.clipboardData.setData('text/plain',lines.join('\n'));e.preventDefault();
+  toast(`Đã sao chép ${R.r1-R.r0+1} × ${R.c1-R.c0+1} ô (dán được vào Excel)`);
+});
+document.addEventListener('paste',e=>{
+  if(!inGrid()||!S.rg)return;e.preventDefault();
+  let txt=(e.clipboardData.getData('text/plain')||'').replace(/\r\n?/g,'\n');if(txt.endsWith('\n'))txt=txt.slice(0,-1);
+  const cells=txt.split('\n').map(l=>l.split('\t'));const R=rgN();
+  if(cells.length===1&&cells[0].length===1&&(R.r0!==R.r1||R.c0!==R.c1)){setRange(cells[0][0],'Dán vào vùng');return}
+  begin();let n=0,sk=0,xr=0,xc=0;
+  cells.forEach((row,i)=>{const r=R.r0+i;if(r>=S.vis.length){xr++;return}const t=byId.get(S.vis[r]);
+    row.forEach((v,j)=>{const c=R.c0+j;if(c>LASTC()){if(i===0)xc++;return}const k=COLS[c].k,x=norm(v);
+      if(t.err||validate(k,x)||crossCheck(t,k,x)){sk++;return}setVal(t.id,k,x);n++})});
+  commit('Dán');
+  const rr=Math.min(S.vis.length-1,R.r0+cells.length-1),cc=Math.min(LASTC(),R.c0+Math.max(...cells.map(r=>r.length))-1);
+  S.rg={a:{r:R.r0,c:R.c0},b:{r:rr,c:cc}};syncRows();S.lastFill=null;
+  toast(`Đã dán ${n} ô`+(sk?`, bỏ qua ${sk} ô`:'')+(xr?`, bỏ ${xr} dòng thừa`:'')+(xc?`, bỏ ${xc} cột thừa`:''));render();
+});
+
+/* ---------- side ---------- */
+$('side').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.folder!==undefined){S.folder=b.dataset.folder||null}
+  else if(b.dataset.filter){S.filter=b.dataset.filter}
+  else if(b.dataset.history){openHistory();return}
+  S.rg=null;S.lastFill=null;render();
+});
+$('search').addEventListener('input',e=>{S.q=e.target.value;S.rg=null;renderGrid()});
+
+/* ---------- inspector ---------- */
+$('insp').addEventListener('change',e=>{
+  const f=e.target.dataset.f; if(f){
+    const t=selTracks()[0],v=norm(e.target.value),er=validate(f,v)||crossCheck(t,f,v);
+    if(er){$('e_'+f).textContent=er;e.target.focus();return}
+    begin();setVal(t.id,f,v);commit('Sửa '+LABEL[f]);render();return}
+  const b=e.target.dataset.b; if(b){$('ba_'+b).value='set'}
+});
+$('insp').addEventListener('input',e=>{const b=e.target.dataset.b;if(b)$('ba_'+b).value='set'});
+$('insp').addEventListener('click',e=>{
+  const c=e.target.closest('button');if(!c)return;
+  const t=selTracks()[0];
+  if(c.dataset.pick){$('b_'+c.dataset.pick).value=c.dataset.v;$('ba_'+c.dataset.pick).value='set';return}
+  if(c.dataset.artdir){begin();setVal(t.id,'art','cover.jpg · 1200×1200 (từ thư mục)',true);commit('Ảnh bìa');render();return}
+  if(c.dataset.artdel){begin();setVal(t.id,'art','',true);commit('Xoá ảnh bìa');render();return}
+  if(c.dataset.keep){S.status.delete(+c.dataset.keep);toast('Giữ thay đổi của bạn, sẽ ghi ở lượt sau');render();return}
+  if(c.dataset.take){const id=+c.dataset.take;for(const k of [...S.staged.keys()])if(k.startsWith(id+'|'))S.staged.delete(k);S.status.delete(id);toast('Đã lấy giá trị trong file, bỏ thay đổi chờ của file này');render();return}
+  if(c.id==='bBatch'){
+    const ok=selTracks().filter(t=>!t.err);let n=0,bad=null;
+    const plan=[];
+    for(const k of ['album','albumartist','artist','genre','year','composer']){
+      const act=$('ba_'+k).value;if(act==='keep')continue;
+      const v=act==='clear'?'':norm($('b_'+k).value);const er=validate(k,v);if(er){$('be_'+k).textContent=er;bad=er}
+      plan.push([k,v]);
+    }
+    if(bad)return;
+    begin();for(const t of ok)for(const [k,v] of plan)if(setVal(t.id,k,v))n++;commit('Sửa nhiều file');
+    toast(n?`Đã tạo ${n} thay đổi chờ trên ${ok.length} file`:'Không có gì thay đổi');render();
+  }
+});
+
+/* ---------- toolbar ---------- */
+$('bUndo').onclick=doUndo;$('bRedo').onclick=doRedo;
+$('bReplace').onclick=openReplace;$('bPattern').onclick=openPattern;
+$('bNumber').onclick=()=>{
+  const sel=rowsVisible().filter(t=>S.sel.has(t.id)&&!t.err);
+  if(!sel.length){toast('Chọn các track cần đánh số trước');return}
+  const groups=new Map();sel.forEach(t=>{(groups.get(t.dir)||groups.set(t.dir,[]).get(t.dir)).push(t)});
+  begin();let n=0;for(const g of groups.values())g.forEach((t,i)=>{if(setVal(t.id,'track',String(i+1)))n++;if(setVal(t.id,'tracktotal',String(g.length)))n++});commit('Đánh số track');
+  toast(`Đánh số ${sel.length} track trong ${groups.size} thư mục (kèm Track Total)`);render();
+};
+$('bClean').onclick=()=>{
+  const sel=S.sel.size?selTracks():rowsVisible();begin();let n=0;
+  for(const t of sel)for(const k of TEXTF)if(setVal(t.id,k,val(t,k)))n++;commit('Dọn khoảng trắng & Unicode');
+  toast(n?`Đã chuẩn hoá ${n} giá trị`:'Không có giá trị nào cần chuẩn hoá');render();
+};
+$('actionbar').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.id==='bReview')openReview();
+  if(b.id==='bDiscard')confirmBox(`Bỏ ${S.staged.size} thay đổi chưa áp dụng?`,'Bỏ tất cả',()=>{begin();for(const [key] of [...S.staged]){const [id,k]=key.split('|');setVal(+id,k,byId.get(+id)[k]??'',true)}commit('Bỏ tất cả');render()});
+  if(b.dataset.refill)refill(b.dataset.refill);
+  if(b.id==='bScan')runScan();
+  if(b.id==='bCancel'&&S.busy)S.busy.cancel=true;
+});
+document.addEventListener('keydown',e=>{
+  if(!$('app').contains(document.activeElement)&&document.activeElement!==document.body)return;
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+  const m=e.metaKey||e.ctrlKey;
+  if(m&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?doRedo():doUndo()}
+  else if(m&&e.key.toLowerCase()==='s'){e.preventDefault();if(S.staged.size)openReview()}
+  else if(m&&e.shiftKey&&e.key.toLowerCase()==='h'){e.preventDefault();openReplace()}
+  else if(m&&e.key.toLowerCase()==='a'&&inGrid()){e.preventDefault();renderGrid();if(S.vis.length){S.rg={a:{r:0,c:0},b:{r:S.vis.length-1,c:LASTC()}};syncRows()}refresh()}
+  else if(inGrid())gridKey(e);
+});
+$('app').addEventListener('mousedown',e=>{if(!['INPUT','SELECT','BUTTON','A'].includes(e.target.tagName))$('app').focus({preventScroll:true})});
+
+/* ---------- modal helpers ---------- */
+function modal(title,body,foot){
+  $('modalHost').innerHTML=`<div class="modal-bg"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h5>${esc(title)}</h5><span class="tb-spacer"></span><button class="tb-btn" data-close="1" aria-label="Đóng">✕</button></header><div class="mbody">${body}</div><footer>${foot}</footer></div></div>`;
+  const m=$('modalHost').querySelector('.modal');
+  m.addEventListener('click',e=>{if(e.target.closest('[data-close]'))closeModal()});
+  return m;
+}
+function closeModal(){$('modalHost').innerHTML=''}
+function confirmBox(msg,okLabel,fn){
+  const m=modal('Xác nhận',`<p>${esc(msg)}</p>`,`<span class="tb-spacer"></span><button class="tb-btn" data-close="1">Huỷ</button><button class="tb-btn primary" id="mOk">${esc(okLabel)}</button>`);
+  m.style.width='min(420px,94%)';
+  $('mOk').onclick=()=>{closeModal();fn()};
+}
+
+/* ---------- find & replace ---------- */
+const RX_PRESETS=[
+ {name:'Xoá tiền tố số dạng "16 / "',find:'^(?:\\d+\\s*/\\s*)+',rep:'',field:'album',mode:'regex'},
+ {name:'Bỏ số thứ tự ở đầu Title',find:'^\\d{1,3}[\\s.\\-_]+',rep:'',field:'title',mode:'regex'},
+ {name:'Đảo "Họ, Tên" thành "Tên Họ"',find:'^([^,]+),\\s*(.+)$',rep:'$2 $1',field:'artist',mode:'regex'},
+ {name:'Xoá phần trong ngoặc vuông',find:'\\s*\\[[^\\]]*\\]',rep:'',field:'*',mode:'regex'},
+ {name:'Chuẩn hoá "feat."',find:'\\s*[(\\[]?\\s*(?:ft\\.?|feat\\.?|featuring)\\s+([^)\\]]+)[)\\]]?',rep:' (feat. $1)',field:'title',mode:'regex'},
+];
+function userPresets(){try{return JSON.parse(localStorage.getItem('mlt-rx')||'[]')}catch(e){return S._rx||[]}}
+function saveUserPreset(p){const a=userPresets();a.push(p);S._rx=a;try{localStorage.setItem('mlt-rx',JSON.stringify(a))}catch(e){}}
+function openReplace(){
+  const scopeSel=S.sel.size>0;
+  const all=[...RX_PRESETS,...userPresets()];
+  const m=modal('Tìm & thay',`
+    <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+      <div class="fld" style="flex:1;min-width:220px"><label for="rPreset">Mẫu đã lưu</label><select id="rPreset"><option value="">(chọn mẫu để điền sẵn)</option>${all.map((p,i)=>`<option value="${i}">${esc(p.name)}</option>`).join('')}</select></div>
+      <button class="tb-btn" id="rSave">Lưu mẫu</button>
+    </div>
+    <div class="form-grid">
+      <div class="fld wide"><label for="rFind">Tìm</label><input id="rFind" value="16 / "></div>
+      <div class="fld wide"><label for="rRep">Thay bằng</label><input id="rRep" value="" placeholder="(chuỗi rỗng = xoá)"><span id="rHelp" style="font-size:11px;color:var(--muted)"></span></div>
+      <div class="fld"><label for="rField">Trường</label><select id="rField"><option value="album">Album</option><option value="title">Title</option><option value="artist">Artist</option><option value="albumartist">Album Artist</option><option value="genre">Genre</option><option value="*">Mọi trường văn bản</option></select></div>
+      <div class="fld"><label for="rMode">Kiểu khớp</label><select id="rMode"><option value="start">Bắt đầu bằng</option><option value="contains">Chứa</option><option value="end">Kết thúc bằng</option><option value="whole">Toàn bộ giá trị</option><option value="regex">Biểu thức chính quy</option></select></div>
+      <div class="fld"><label for="rScope">Phạm vi</label><select id="rScope"><option value="vis">Dòng đang hiển thị</option><option value="sel" ${scopeSel?'selected':''}>Dòng đang chọn (${S.sel.size})</option></select></div>
+      <div class="fld"><label>&nbsp;</label><label class="checkline" for="rCase"><input type="checkbox" id="rCase" style="width:auto">Phân biệt hoa/thường</label></div>
+    </div>
+    <div id="rErr" class="nomatch"></div>
+    <div id="rPrev"></div>`,
+    `<span id="rSum" style="font-size:12.5px;color:var(--muted)"></span><span class="tb-spacer"></span><button class="tb-btn" data-close="1">Huỷ</button><button class="tb-btn primary" id="rGo">Thay</button>`);
+  let matches=[];
+  const upd=()=>{
+    const find=$('rFind').value,rep=$('rRep').value,field=$('rField').value,mode=$('rMode').value,cs=$('rCase').checked;
+    const rows=($('rScope').value==='sel'?selTracks():rowsVisible()).filter(t=>!t.err);
+    const fields=field==='*'?TEXTF:[field];matches=[];$('rErr').textContent='';
+    $('rHelp').textContent=mode==='regex'?'$1, $2… nhóm bắt · $<ten> nhóm đặt tên · $& cả đoạn khớp · $$ ký tự $':'';
+    if(!find){$('rPrev').innerHTML='';$('rSum').textContent='';$('rGo').disabled=true;return}
+    let re;
+    try{
+      const e=find.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),fl=cs?'':'i';
+      re= mode==='regex'?new RegExp(find,'g'+fl): mode==='start'?new RegExp('^'+e,fl): mode==='end'?new RegExp(e+'$',fl): mode==='whole'?new RegExp('^'+e+'$',fl): new RegExp(e,'g'+fl);
+    }catch(err){$('rErr').textContent='Biểu thức không hợp lệ: '+err.message;$('rGo').disabled=true;return}
+    for(const t of rows)for(const k of fields){const v=val(t,k);re.lastIndex=0;if(!re.test(v))continue;re.lastIndex=0;
+      const nv=mode==='regex'?v.replace(re,rep):v.replace(re,()=>rep);if(nv===v)continue;re.lastIndex=0;
+      const hl=esc(v).replace(new RegExp(re.source,re.flags.includes('g')?re.flags:re.flags+'g'),s=>`<span class="hl">${s}</span>`);
+      matches.push({t,k,v,nv,hl})}
+    $('rPrev').innerHTML=matches.length?`<table class="diff"><thead><tr><th style="width:24px"></th><th>File</th><th>Trường</th><th>Cũ</th><th>Mới</th></tr></thead><tbody>${matches.slice(0,200).map((m,i)=>`<tr><td><input type="checkbox" checked data-mi="${i}" aria-label="Chọn"></td><td class="mono" style="font-size:11px">${esc(m.t.file)}</td><td>${LABEL[m.k]}</td><td>${m.hl}</td><td><span class="new">${esc(m.nv)||'(trống)'}</span></td></tr>`).join('')}</tbody></table>`:'<p class="nomatch">Không có file nào khớp</p>';
+    $('rSum').textContent=matches.length?`${matches.length} mục khớp`:'';
+    $('rGo').disabled=!matches.length;$('rGo').textContent=`Thay ${matches.length} mục`;
+  };
+  m.querySelectorAll('input,select').forEach(i=>{if(i.id!=='rPreset'){i.addEventListener('input',upd);i.addEventListener('change',upd)}});
+  $('rPreset').addEventListener('change',e=>{const p=all[+e.target.value];if(!p)return;$('rFind').value=p.find;$('rRep').value=p.rep;$('rField').value=p.field;$('rMode').value=p.mode;$('rCase').checked=!!p.cs;$('rScope').value='vis';upd()});
+  $('rSave').onclick=()=>{const f=$('rFind').value;if(!f){toast('Nhập chuỗi tìm trước khi lưu mẫu');return}
+    const p={name:`${f} → ${$('rRep').value||'(xoá)'}`,find:f,rep:$('rRep').value,field:$('rField').value,mode:$('rMode').value,cs:$('rCase').checked};
+    saveUserPreset(p);all.push(p);const o=document.createElement('option');o.value=all.length-1;o.textContent=p.name;$('rPreset').appendChild(o);$('rPreset').value=o.value;toast('Đã lưu mẫu "'+p.name+'"')};
+  m.addEventListener('change',e=>{if(e.target.dataset.mi!==undefined){const n=m.querySelectorAll('[data-mi]:checked').length;$('rGo').textContent=`Thay ${n} mục`;$('rGo').disabled=!n}});
+  $('rGo').onclick=()=>{const on=new Set([...m.querySelectorAll('[data-mi]:checked')].map(c=>+c.dataset.mi));begin();let n=0;matches.forEach((x,i)=>{if(on.has(i)&&setVal(x.t.id,x.k,x.nv))n++});commit('Tìm & thay');closeModal();toast(`Đã tạo ${n} thay đổi chờ`);render()};
+  upd();$('rFind').focus();
+}
+
+/* ---------- tag from filename ---------- */
+function openPattern(){
+  const m=modal('Tag từ tên file',`
+    <div class="fld"><label for="pPat">Mẫu (áp lên tên file, bỏ phần đuôi)</label><input id="pPat" class="mono" value="%track% - %artist% - %title%"></div>
+    <div class="chips"><span style="font-size:11.5px;color:var(--muted)">Token:</span>${['%track%','%artist%','%title%','%album%','%year%','%ignore%'].map(x=>`<button class="chip" data-tok="${x}">${x}</button>`).join('')}</div>
+    <div id="pErr" class="nomatch"></div><div id="pPrev"></div>`,
+    `<span id="pSum" style="font-size:12.5px;color:var(--muted)"></span><span class="tb-spacer"></span><button class="tb-btn" data-close="1">Huỷ</button><button class="tb-btn primary" id="pGo">Áp dụng</button>`);
+  let res=[];
+  const rows=(S.sel.size?selTracks():rowsVisible()).filter(t=>!t.err);
+  const upd=()=>{
+    const pat=$('pPat').value;const toks=[];
+    const src=pat.split(/(%\w+%)/).map(p=>{const m=p.match(/^%(\w+)%$/);if(m){toks.push(m[1]);return m[1]==='track'||m[1]==='year'?'(\\d+)':'(.+?)'}return p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}).join('');
+    if(!toks.length){$('pErr').textContent='Mẫu phải chứa ít nhất một trường, ví dụ %title%';$('pPrev').innerHTML='';$('pGo').disabled=true;return}
+    $('pErr').textContent='';const re=new RegExp('^'+src+'$');
+    const shown=toks.filter(t=>t!=='ignore');
+    res=rows.map(t=>{const base=t.file.replace(/\.[^.]+$/,'');const m=base.match(re);if(!m)return{t,ok:false};const o={};toks.forEach((k,i)=>{if(k!=='ignore')o[k]=k==='track'?String(+m[i+1]):m[i+1]});return{t,ok:true,o}});
+    const ok=res.filter(r=>r.ok).length;
+    $('pPrev').innerHTML=`<table class="diff"><thead><tr><th>Tên file</th>${shown.map(k=>`<th>${LABEL[k]||k}</th>`).join('')}</tr></thead><tbody>${res.map(r=>`<tr><td class="mono" style="font-size:11px">${esc(r.t.file)}</td>${r.ok?shown.map(k=>{const same=val(r.t,k)===norm(r.o[k]);return `<td>${same?esc(r.o[k]):`<span class="new">${esc(r.o[k])}</span>`}</td>`}).join(''):`<td colspan="${shown.length}" class="nomatch">Không khớp</td>`}</tr>`).join('')}</tbody></table>`;
+    $('pSum').textContent=`${ok} khớp · ${res.length-ok} không khớp`;$('pGo').disabled=!ok;
+  };
+  $('pPat').addEventListener('input',upd);
+  m.addEventListener('click',e=>{const b=e.target.closest('[data-tok]');if(b){const i=$('pPat');i.value+=b.dataset.tok;upd();i.focus()}});
+  $('pGo').onclick=()=>{begin();let n=0;res.filter(r=>r.ok).forEach(r=>{for(const k in r.o)if(setVal(r.t.id,k,r.o[k]))n++});commit('Tag từ tên file');closeModal();toast(`Đã tạo ${n} thay đổi chờ`);render()};
+  upd();
+}
+
+/* ---------- review & apply ---------- */
+function stagedList(){return [...S.staged].map(([key,{v}])=>{const [id,k]=key.split('|');const t=byId.get(+id);return{key,t,k,old:t[k]??'',nv:v}})}
+function openReview(){
+  const list=stagedList();const on=new Set(list.map(x=>x.key));let tab='file';
+  const m=modal('Xem trước thay đổi',`<div class="tabs"><button class="on" data-tab="file">Theo file</button><button data-tab="field">Theo trường</button></div><div id="rvBody"></div>`,
+    `<span id="rvSum" style="font-size:12.5px"></span><span class="tb-spacer"></span><button class="tb-btn" data-close="1">Đóng</button><button class="tb-btn primary" id="rvGo">Áp dụng</button>`);
+  const show=v=>v===''?'<span style="color:var(--muted)">(trống)</span>':esc(v);
+  const draw=()=>{
+    let h='';
+    if(tab==='file'){
+      h='<table class="diff"><thead><tr><th style="width:26px"></th><th>Trường</th><th>Cũ</th><th>Mới</th></tr></thead><tbody>';
+      let d=null,f=null;
+      for(const x of list.sort((a,b)=>(a.t.dir+a.t.file).localeCompare(b.t.dir+b.t.file))){
+        if(x.t.dir!==d){d=x.t.dir;const ks=list.filter(y=>y.t.dir===d).map(y=>y.key);h+=`<tr class="dir"><td><input type="checkbox" data-grp="${esc(ks.join(','))}" ${ks.every(k=>on.has(k))?'checked':''} aria-label="Chọn thư mục"></td><td colspan="3">${esc(ROOT+'/'+d)}</td></tr>`}
+        if(x.t.id!==f){f=x.t.id;const ks=list.filter(y=>y.t.id===f).map(y=>y.key);h+=`<tr class="file"><td><input type="checkbox" data-grp="${ks.join(',')}" ${ks.every(k=>on.has(k))?'checked':''} aria-label="Chọn file"></td><td colspan="3">${esc(x.t.file)}${S.status.get(x.t.id)==='conflict'?' <span class="pill pend">xung đột trước đó</span>':''}</td></tr>`}
+        h+=`<tr><td><input type="checkbox" data-grp="${x.key}" ${on.has(x.key)?'checked':''} aria-label="Chọn"></td><td>${LABEL[x.k]}</td><td class="old">${show(x.old)}</td><td><span class="new">${show(x.nv)}</span></td></tr>`;
+      }
+      h+='</tbody></table>';
+    }else{
+      const g=new Map();list.forEach(x=>{const id=x.k+'\u0000'+x.old+'\u0000'+x.nv;(g.get(id)||g.set(id,[]).get(id)).push(x)});
+      h='<table class="diff"><thead><tr><th style="width:26px"></th><th>Trường</th><th>Cũ → Mới</th><th>Số file</th></tr></thead><tbody>'+[...g.values()].sort((a,b)=>b.length-a.length).map(xs=>{const ks=xs.map(x=>x.key);return `<tr><td><input type="checkbox" data-grp="${ks.join(',')}" ${ks.every(k=>on.has(k))?'checked':''} aria-label="Chọn nhóm"></td><td>${LABEL[xs[0].k]}</td><td><span class="old">${show(xs[0].old)}</span> → <span class="new">${show(xs[0].nv)}</span></td><td class="num">${xs.length}</td></tr>`}).join('')+'</tbody></table>';
+    }
+    $('rvBody').innerHTML=h;
+    const files=new Set(list.filter(x=>on.has(x.key)).map(x=>x.t.id)).size;
+    $('rvSum').innerHTML=`<b>${on.size}</b> thay đổi trên <b>${files}</b> file được chọn`;
+    $('rvGo').disabled=!on.size;$('rvGo').textContent=`Áp dụng ${on.size} thay đổi`;
+  };
+  m.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b){tab=b.dataset.tab;m.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('on',x===b));draw()}});
+  m.addEventListener('change',e=>{const g=e.target.dataset.grp;if(g!==undefined){g.split(',').forEach(k=>e.target.checked?on.add(k):on.delete(k));draw()}});
+  $('rvGo').onclick=()=>runApply(list.filter(x=>on.has(x.key)),m);
+  draw();
+}
+function runApply(items,m){
+  const files=[...new Map(items.map(x=>[x.t.id,x.t])).values()];
+  const body=m.querySelector('.mbody'),foot=m.querySelector('footer');
+  foot.innerHTML=`<div class="progress" style="flex:1"><span id="apTxt"></span><div class="bar" style="flex:1"><i id="apBar"></i></div></div><button class="tb-btn" id="apCancel">Huỷ</button>`;
+  body.innerHTML=`<table class="diff"><tbody>${files.map(t=>`<tr><td class="mono" style="font-size:11.5px">${esc(t.file)}</td><td id="ap_${t.id}" style="width:220px;color:var(--muted)">Đang chờ</td></tr>`).join('')}</tbody></table>`;
+  let i=0,cancel=false;const res={ok:[],conf:[],err:[],left:[]};const changes=[];
+  $('apCancel').onclick=()=>{cancel=true};
+  const step=()=>{
+    if(cancel||i>=files.length){
+      if(cancel)res.left=files.slice(i);
+      finish();return}
+    const t=files[i++];const cell=$('ap_'+t.id);
+    if(!S.conflictUsed&&t.id===9){S.conflictUsed=true;S.status.set(t.id,'conflict');res.conf.push(t);cell.innerHTML='<span class="pill pend">Xung đột · file đã bị thay đổi bên ngoài app</span>'}
+    else{
+      for(const x of items.filter(x=>x.t.id===t.id)){changes.push({id:t.id,k:x.k,old:t[x.k]??'',nv:x.nv});t[x.k]=x.nv;S.staged.delete(x.key)}
+      S.status.delete(t.id);res.ok.push(t);cell.innerHTML='<span class="pill ok">Đã ghi · đã xác minh</span>';
+    }
+    $('apTxt').textContent=`Đang ghi ${i} / ${files.length} file`;$('apBar').style.width=(i/files.length*100)+'%';
+    setTimeout(step,170);
+  };
+  const finish=()=>{
+    S.undo=[];S.redo=[];
+    if(changes.length){const by=new Map();changes.forEach(c=>by.set(c.k,(by.get(c.k)||new Set()).add(c.id)));
+      S.history.unshift({id:S.history.length+1,time:new Date(),files:res.ok.length,changes,summary:[...by].map(([k,s])=>`${LABEL[k]}: ${s.size} file`).join(', '),undone:false,label:S._undoLabel||null});S._undoLabel=null}
+    body.innerHTML=`<div class="report-stats"><div><b style="color:var(--ok)">${res.ok.length}</b><span>thành công</span></div><div><b style="color:var(--warn)">${res.conf.length}</b><span>xung đột</span></div><div><b style="color:var(--danger)">${res.err.length}</b><span>lỗi</span></div><div><b>${res.left.length}</b><span>đã huỷ (còn chờ)</span></div></div>
+      <p>Đã ghi ${res.ok.length} / ${files.length} file. Giá trị gốc đã lưu trong lịch sử, có thể hoàn tác.</p>
+      ${res.conf.length?`<div class="confbox"><b>${esc(res.conf[0].file)}</b>File đã bị thay đổi bên ngoài app sau lần quét. Thay đổi của bạn vẫn được giữ; chọn file trong bảng để quyết định giữ hay lấy giá trị trong file.</div>`:''}`;
+    foot.innerHTML=`<span class="tb-spacer"></span>${changes.length?`<button class="tb-btn" id="apUndo">Hoàn tác lượt này</button>`:''}<button class="tb-btn primary" data-close="1">Đóng</button>`;
+    if(changes.length)$('apUndo').onclick=()=>{closeModal();undoHistory(S.history[0])};
+    render();
+  };
+  step();
+}
+
+/* ---------- history ---------- */
+function undoHistory(h){
+  begin();let n=0,skip=0;
+  for(const c of h.changes){const t=byId.get(c.id);if((t[c.k]??'')!==c.nv){skip++;continue}if(setVal(c.id,c.k,c.old,true))n++}
+  commit('Hoàn tác lượt '+h.id);h.undone=true;S._undoLabel='Hoàn tác của lượt '+h.id;render();
+  toast(`Đã tạo ${n} thay đổi đảo ngược${skip?`, bỏ qua ${skip} trường đã thay đổi sau lượt này`:''}. Xem trước để áp dụng.`);
+  if(n)openReview();
+}
+function openHistory(){
+  const rows=S.history.map(h=>`<tr><td class="num">${h.id}</td><td>${h.time.toLocaleTimeString('vi-VN')}</td><td>${h.label?esc(h.label):'Sửa tag'}</td><td class="num">${h.files}</td><td>${esc(h.summary)}</td><td>${h.undone?'<span class="pill b">đã hoàn tác</span>':`<button class="tb-btn" data-undo="${h.id}">Hoàn tác…</button>`}</td></tr>`).join('');
+  const m=modal('Lịch sử',S.history.length?`<table class="diff"><thead><tr><th>#</th><th>Lúc</th><th>Loại</th><th>File</th><th>Tóm tắt</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:'<p style="color:var(--muted)">Chưa có lượt áp dụng nào.</p>',`<span class="tb-spacer"></span><button class="tb-btn primary" data-close="1">Đóng</button>`);
+  m.addEventListener('click',e=>{const b=e.target.closest('[data-undo]');if(b){closeModal();undoHistory(S.history.find(h=>h.id===+b.dataset.undo))}});
+}
+
+/* ---------- scan ---------- */
+function runScan(){
+  const total=1284;let n=0;S.busy={text:'',pct:0,cancel:false};
+  const tick=()=>{
+    if(S.busy.cancel){const k=n;S.busy=null;renderBar();toast(`Đã huỷ quét sau ${fmtN(k)} file; các file đã đọc được giữ trong chỉ mục`);return}
+    n=Math.min(total,n+Math.round(60+Math.random()*50));
+    const left=Math.ceil((total-n)/212);
+    S.busy.text=`Đang quét Staging — ${fmtN(n)} / ${fmtN(total)} file · 212 file/giây · còn khoảng ${left} giây`;S.busy.pct=n/total*100;renderBar();
+    if(n<total)setTimeout(tick,120);else{S.busy=null;renderBar();toast('Quét xong: 1.284 file · mới 0 · thay đổi 0 · đã xoá 0 · lỗi 1 · bỏ qua 212 (không hỗ trợ)')}
+  };tick();
+}
+
+/* initial state: chọn album Bolero để thấy ngay vấn đề */
+S.filter='incons';renderGrid();S.rg={a:{r:0,c:3},b:{r:5,c:3}};syncRows();
+render();
+</script>
