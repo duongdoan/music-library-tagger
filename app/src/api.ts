@@ -40,7 +40,7 @@ export interface ScanSummary {
   sourceId: number; read: number; added: number; changed: number; removed: number;
   errors: number; skipped: number; cancelled: boolean; unavailable: boolean;
 }
-export interface FileResult { path: string; status: "ok" | "conflict" | "error" | "cancelled"; message: string | null; row: TrackRow | null }
+export interface FileResult { path: string; status: "writing" | "ok" | "conflict" | "error" | "cancelled"; message: string | null; row: TrackRow | null }
 export interface ApplyReport { runId: number; ok: number; conflict: number; error: number; cancelled: number; results: FileResult[] }
 export interface RunInfo {
   id: number; kind: string; label: string | null; started: number; finished: number | null; status: string;
@@ -64,7 +64,8 @@ export const api = {
   stageSet: (changes: StageInput[]) => invoke<{ applied: number; rejected: string[] }>("stage_set", { changes }),
   stageList: () => invoke<StagedChange[]>("stage_list"),
   stageDiscard: (keys: ApplyItem[]) => invoke<void>("stage_discard", { keys }),
-  applyRun: (items: ApplyItem[], undoOf?: number) => invoke<ApplyReport>("apply_run", { items, undoOf: undoOf ?? null }),
+  applyRun: (items: ApplyItem[], undoOf?: number, inPlace?: boolean) =>
+    invoke<ApplyReport>("apply_run", { items, undoOf: undoOf ?? null, inPlace: inPlace ?? null }),
   cancelApply: () => invoke<void>("cancel_apply"),
   listRuns: () => invoke<RunInfo[]>("list_runs"),
   undoPlan: (runId: number) => invoke<UndoPlan>("undo_plan", { runId }),

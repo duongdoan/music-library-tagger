@@ -45,10 +45,12 @@ export function installMockBackend() {
           return null;
         case "apply_run": {
           const id = runs.length + 1;
+          (window as any).__mock.lastInPlace = args.inPlace;
           const files = [...new Set(args.items.map((i: any) => i.path))] as string[];
           const res: any[] = [];
           let n = 0;
           for (const p of files) {
+            await emit("apply-progress", { done: n, total: files.length, result: { path: p, status: "writing", message: null, row: null } });
             await new Promise((r) => setTimeout(r, 120));
             const t = tracks.get(p)!;
             let r: any;

@@ -78,7 +78,7 @@ pub fn write_safely(p: &Path, changes: &Fields, in_place: bool) -> Result<()> {
     let size = fs::metadata(p)?.len();
     let real: Fields = changes.iter().filter(|(k, _)| !k.starts_with('_')).map(|(k, v)| (k.clone(), v.clone())).collect();
     if in_place || size > ATOMIC_LIMIT {
-        tags::write_track(p, &real)?;
+        tags::write_track_in_place(p, &real)?;
         return tags::verify(p, &real);
     }
     let tmp = tmp_path(p);
@@ -140,6 +140,10 @@ pub fn apply(
     let mut per_field: BTreeMap<String, usize> = BTreeMap::new();
 
     for (i, (path, changes)) in by_file.iter().enumerate() {
+        if !cancel.load(Ordering::Relaxed) {
+            // tell the UI which file is being written (a network write can take seconds)
+            on_file(i, total, &FileResult { path: path.clone(), status: "writing".into(), message: None, row: None });
+        }
         let res = if cancel.load(Ordering::Relaxed) {
             FileResult { path: path.clone(), status: "cancelled".into(), message: None, row: None }
         } else {

@@ -72,6 +72,10 @@ fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 1;")?;
     }
+    if v < 2 {
+        // v2: FLAC Album Artist under a non-standard key only is now flagged: re-read FLAC files
+        conn.execute_batch("UPDATE tracks SET mtime = -1 WHERE ext = 'flac'; PRAGMA user_version = 2;")?;
+    }
     Ok(())
 }
 

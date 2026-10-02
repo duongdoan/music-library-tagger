@@ -36,6 +36,11 @@ fn make_wav(dir: &Path, name: &str, info: &[(&[u8; 4], &[u8])]) -> PathBuf {
 
 /// FLAC with STREAMINFO + VORBIS_COMMENT + a fake 8-byte frame region.
 fn make_flac(dir: &Path, comments: &[&str]) -> PathBuf {
+    make_flac_with(dir, comments, &[])
+}
+
+/// Same, with extra metadata blocks after the comments: (type, payload).
+fn make_flac_with(dir: &Path, comments: &[&str], extra: &[(u8, Vec<u8>)]) -> PathBuf {
     let mut si = vec![0u8; 34];
     si[0..2].copy_from_slice(&4096u16.to_be_bytes()); si[2..4].copy_from_slice(&4096u16.to_be_bytes());
     // 44100 Hz, 2 ch, 16 bit, 441000 samples (10 s)
@@ -50,7 +55,12 @@ fn make_flac(dir: &Path, comments: &[&str]) -> PathBuf {
     for c in comments { vc.extend(le32(c.len() as u32)); vc.extend(c.as_bytes()); }
     let mut f = b"fLaC".to_vec();
     f.push(0); f.extend(&(si.len() as u32).to_be_bytes()[1..]); f.extend(&si);
-    f.push(0x80 | 4); f.extend(&(vc.len() as u32).to_be_bytes()[1..]); f.extend(&vc);
+    f.push(if extra.is_empty() { 0x80 | 4 } else { 4 }); f.extend(&(vc.len() as u32).to_be_bytes()[1..]); f.extend(&vc);
+    for (i, (kind, body)) in extra.iter().enumerate() {
+        f.push(if i + 1 == extra.len() { 0x80 | kind } else { *kind });
+        f.extend(&(body.len() as u32).to_be_bytes()[1..]);
+        f.extend(body);
+    }
     f.extend([0xff, 0xf8, 0x69, 0x08, 0x00, 0x00, 0x00, 0x00]);
     let p = dir.join("t.flac");
     fs::write(&p, f).unwrap();
@@ -159,11 +169,14 @@ fn dsf_roundtrip_keeps_audio_and_other_frames() {
 #[test]
 fn flac_with_two_album_artist_spellings_reads_one_value() {
     let d = tempfile::tempdir().unwrap();
-    let p = make_flac(d.path(), &["ALBUMARTIST=A", "ALBUM ARTIST=A", "ARTIST=X", "ARTIST=Y"]);
+    let p = make_flac(d.path(), &["ALBUMARTIST=A", "ALBUM ARTIST=A", "ARTIST=X", "ARTIST=Y", "GENRE=Pop", "GENRE=Rock"]);
     let ch = fields(&[("albumartist", "Various Artists")]);
     write_track(&p, &ch).unwrap();
     verify(&p, &ch).unwrap();
     assert_eq!(read_track(&p).unwrap().fields.get("artist").unwrap(), "X; Y");
+    // a key repeated in the file is written once
+    write_track(&p, &fields(&[("genre", "Jazz")])).unwrap();
+    assert_eq!(read_track(&p).unwrap().fields.get("genre").unwrap(), "Jazz");
 }
 
 #[test]
@@ -193,9 +206,20 @@ fn album_artist_key_mismatch_is_flagged_and_fixed_by_writing() {
     assert!(t.aa_mismatch);
     write_track(&p, &fields(&[("albumartist", "Kyung Wha Chung")])).unwrap();
     assert!(!read_track(&p).unwrap().aa_mismatch);
+    let mut f = File::open(&p).unwrap();
+    let ff = lofty::flac::FlacFile::read_from(&mut f, ParseOptions::new()).unwrap();
+    let keys: Vec<String> = ff.vorbis_comments().unwrap().items().filter(|(_, v)| *v == "Kyung Wha Chung").map(|(k, _)| k.to_string()).collect();
+    assert!(keys.iter().any(|k| k == "ALBUMARTIST"), "standard key written: {keys:?}");
+    assert!(keys.iter().any(|k| k == "ALBUM ARTIST"), "existing spelling kept in step: {keys:?}");
+    assert_eq!(keys.len(), 2, "no duplicate values: {keys:?}");
     // same value under two keys is fine
     let q = make_flac(d.path(), &["ALBUMARTIST=A", "ALBUM ARTIST=A"]);
     assert!(!read_track(&q).unwrap().aa_mismatch);
+    // only the non-standard spelling: flagged, fixed by writing (adds ALBUMARTIST)
+    let r = make_flac(d.path(), &["ALBUM ARTIST=A"]);
+    assert!(read_track(&r).unwrap().aa_mismatch);
+    write_track(&r, &fields(&[("albumartist", "A")])).unwrap();
+    assert!(!read_track(&r).unwrap().aa_mismatch);
 }
 
 #[test]
@@ -239,5 +263,95 @@ fn real_samples_roundtrip() {
         assert_eq!(after.fields, orig.fields, "{}", p.display());
         assert_eq!(audio_hash(&p), h0, "{}", p.display());
         println!("ok {}", p.file_name().unwrap().to_string_lossy());
+    }
+}
+
+fn picture_block() -> Vec<u8> {
+    // minimal PICTURE block: type 3, mime, empty desc, 1x1, 4 bytes of "image"
+    let mut b = vec![];
+    b.extend(3u32.to_be_bytes());
+    b.extend(10u32.to_be_bytes()); b.extend(b"image/jpeg");
+    b.extend(0u32.to_be_bytes());
+    for v in [1u32, 1, 24, 0] { b.extend(v.to_be_bytes()); }
+    b.extend(4u32.to_be_bytes()); b.extend([0xFF, 0xD8, 0xFF, 0xD9]);
+    b
+}
+
+fn vorbis_items(p: &Path) -> Vec<(String, String)> {
+    let mut f = File::open(p).unwrap();
+    let ff = lofty::flac::FlacFile::read_from(&mut f, ParseOptions::new()).unwrap();
+    ff.vorbis_comments().unwrap().items().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+}
+
+#[test]
+fn flac_in_place_uses_padding_and_keeps_audio_and_pictures() {
+    let d = tempfile::tempdir().unwrap();
+    let pic = picture_block();
+    // Decca-style tags, then a picture, then 8 KB padding (typical CUETools/EAC rip)
+    let p = make_flac_with(d.path(), &["album=Antar (Mono)", "albumartist=", "ALBUM ARTIST=Ansermet", "TOTALDISCS=54", "UPC=1"], &[(6, pic.clone()), (1, vec![0; 8192])]);
+    let size0 = fs::metadata(&p).unwrap().len();
+    let audio0 = audio_hash(&p);
+    let bytes0 = fs::read(&p).unwrap();
+    let ch = fields(&[("albumartist", "L'Orchestre de la Suisse Romande; Ernest Ansermet"), ("disctotal", "")]);
+    assert!(flac_inplace::write(&p, &ch).unwrap(), "fits the padding");
+    verify(&p, &ch).unwrap();
+    assert_eq!(fs::metadata(&p).unwrap().len(), size0, "file size unchanged: written in place");
+    assert_eq!(audio_hash(&p), audio0);
+    let items = vorbis_items(&p);
+    assert!(items.iter().any(|(k, v)| k == "ALBUMARTIST" && v.starts_with("L'Orchestre")), "{items:?}");
+    assert!(!items.iter().any(|(k, _)| k.eq_ignore_ascii_case("TOTALDISCS")), "{items:?}");
+    assert!(items.iter().any(|(k, v)| k == "UPC" && v == "1"));
+    assert!(!read_track(&p).unwrap().aa_mismatch);
+    // picture block bytes are still somewhere in the file, untouched
+    let bytes1 = fs::read(&p).unwrap();
+    assert!(bytes1.windows(pic.len()).any(|w| w == pic.as_slice()));
+    assert_eq!(bytes0.len(), bytes1.len());
+    // lofty still reads the file and its picture
+    let tf = lofty::read_from_path(&p).unwrap();
+    assert_eq!(tf.tags().iter().map(|t| t.picture_count()).sum::<u32>(), 1);
+}
+
+#[test]
+fn flac_in_place_without_room_falls_back() {
+    let d = tempfile::tempdir().unwrap();
+    let p = make_flac(d.path(), &["TITLE=A"]); // no padding at all
+    let big = "x".repeat(500);
+    assert!(!flac_inplace::write(&p, &fields(&[("comment", &big)])).unwrap(), "does not fit: nothing written");
+    assert_eq!(read_track(&p).unwrap().fields.get("comment"), None);
+    write_track_in_place(&p, &fields(&[("comment", &big)])).unwrap(); // full rewrite path
+    assert_eq!(read_track(&p).unwrap().fields.get("comment").unwrap(), &big);
+}
+
+#[test]
+fn flac_in_place_shrink_in_slot_and_same_size() {
+    let d = tempfile::tempdir().unwrap();
+    let p = make_flac(d.path(), &["TITLE=Long title here", "ARTIST=X"]);
+    let size0 = fs::metadata(&p).unwrap().len();
+    // shrink by more than 4 bytes: leftover becomes padding in the same slot
+    assert!(flac_inplace::write(&p, &fields(&[("title", "Short")])).unwrap());
+    assert_eq!(read_track(&p).unwrap().fields.get("title").unwrap(), "Short");
+    assert_eq!(fs::metadata(&p).unwrap().len(), size0);
+    // grow back into that padding (case: padding right after the comments)
+    assert!(flac_inplace::write(&p, &fields(&[("title", "Long title here")])).unwrap());
+    assert_eq!(read_track(&p).unwrap().fields.get("title").unwrap(), "Long title here");
+    assert_eq!(fs::metadata(&p).unwrap().len(), size0);
+}
+
+/// `MLT_SAMPLES=dir cargo test real_flac_in_place -- --nocapture`
+#[test]
+fn real_flac_in_place() {
+    let Ok(dir) = std::env::var("MLT_SAMPLES") else { return };
+    let tmp = tempfile::tempdir().unwrap();
+    for e in fs::read_dir(dir).unwrap().flatten() {
+        if ext(&e.path()) != "flac" { continue; }
+        let p = tmp.path().join(e.file_name());
+        fs::copy(e.path(), &p).unwrap();
+        let (h0, s0) = (audio_hash(&p), fs::metadata(&p).unwrap().len());
+        let ch = fields(&[("albumartist", "Kyung Wha Chung, London Symphony Orchestra, André Previn"), ("disctotal", "")]);
+        let fast = flac_inplace::write(&p, &ch).unwrap();
+        if !fast { write_track(&p, &ch).unwrap(); }
+        verify(&p, &ch).unwrap();
+        assert_eq!(audio_hash(&p), h0);
+        println!("{} in_place={fast} size_same={}", p.file_name().unwrap().to_string_lossy(), fs::metadata(&p).unwrap().len() == s0);
     }
 }

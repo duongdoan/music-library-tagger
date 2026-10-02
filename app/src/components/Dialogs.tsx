@@ -203,7 +203,7 @@ export function ReviewDialog({ onClose, undoOf }: { onClose: () => void; undoOf?
   }).filter((x) => x.t).sort((a, b) => (a.path + a.field).localeCompare(b.path + b.field)), []);
   const [on_, setOn] = useState<Set<string>>(() => new Set(list.map((x) => x.key)));
   const [tab, setTab] = useState<"file" | "field">("file");
-  const [running, setRunning] = useState<{ done: number; total: number } | null>(null);
+  const [running, setRunning] = useState<{ done: number; total: number; started: number; current: string | null } | null>(null);
   const [results, setResults] = useState<FileResult[]>([]);
   const [report, setReport] = useState<ApplyReport | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -211,15 +211,19 @@ export function ReviewDialog({ onClose, undoOf }: { onClose: () => void; undoOf?
   const files = new Set(list.filter((x) => on_.has(x.key)).map((x) => x.path)).size;
   const dirs = new Set(list.filter((x) => on_.has(x.key)).map((x) => x.t.dir)).size;
 
-  const run = async () => {
+  const run = async (inPlace: boolean) => {
     const items = list.filter((x) => on_.has(x.key)).map((x) => ({ path: x.path, field: x.field }));
-    setRunning({ done: 0, total: new Set(items.map((i) => i.path)).size });
+    setRunning({ done: 0, total: new Set(items.map((i) => i.path)).size, started: Date.now(), current: null });
     const un = await on.applyProgress((p) => {
-      setRunning({ done: p.done, total: p.total });
+      if (p.result.status === "writing") {
+        setRunning((r) => r && { ...r, current: p.result.path });
+        return;
+      }
+      setRunning((r) => r && { ...r, done: p.done, total: p.total, current: null });
       setResults((r) => [...r, p.result]);
     });
     try {
-      const rep = await api.applyRun(items, undoOf);
+      const rep = await api.applyRun(items, undoOf, inPlace);
       setReport(rep);
       for (const r of rep.results) {
         if (r.status === "ok") store.status.delete(r.path);
@@ -266,9 +270,12 @@ export function ReviewDialog({ onClose, undoOf }: { onClose: () => void; undoOf?
   return (
     <Modal title={undoOf ? `Xem trước hoàn tác lượt ${undoOf}` : "Xem trước thay đổi"} wide onClose={running ? () => {} : onClose}
       footer={running ? (
-        <div className="progress grow"><span>Đang ghi {fmtN(running.done)} / {fmtN(running.total)} file</span><div className="bar"><i style={{ width: `${(running.done / Math.max(1, running.total)) * 100}%` }} /></div><button className="btn" onClick={() => api.cancelApply()}>Huỷ</button></div>
+        <div className="progress grow"><span>{applyStatus(running)}</span><div className="bar"><i style={{ width: `${(running.done / Math.max(1, running.total)) * 100}%` }} /></div><button className="btn" onClick={() => api.cancelApply()}>Huỷ</button></div>
       ) : (
-        <><span><b>{fmtN(on_.size)}</b> thay đổi trên <b>{fmtN(files)}</b> file · {fmtN(dirs)} thư mục</span><span className="spacer" /><button className="btn" onClick={onClose}>Đóng</button><button className="btn primary" disabled={!on_.size} onClick={run}>Áp dụng {fmtN(on_.size)} thay đổi</button></>
+        <><span><b>{fmtN(on_.size)}</b> thay đổi trên <b>{fmtN(files)}</b> file · {fmtN(dirs)} thư mục</span><span className="spacer" /><button className="btn" onClick={onClose}>Đóng</button><button className="btn" disabled={!on_.size} onClick={() => run(true)}
+          title="Ghi thẳng vào file như bộ script cũ: nhanh trên NAS; vẫn có nhật ký để hoàn tác giá trị tag, nhưng mất kết nối đúng lúc ghi có thể làm hỏng file đang ghi">Ghi nhanh (ghi thẳng)</button>
+        <button className="btn primary" disabled={!on_.size} onClick={() => run(false)}
+          title="Ghi vào bản tạm, kiểm tra rồi mới thay file gốc: file gốc không bao giờ ở trạng thái ghi dở; trên NAS chậm vì phải chép cả file">Ghi an toàn · {fmtN(on_.size)} thay đổi</button></>
       )}>
       {running ? (
         <table className="diff"><tbody>{results.slice(-300).map((r) => (
@@ -283,6 +290,24 @@ export function ReviewDialog({ onClose, undoOf }: { onClose: () => void; undoOf?
       )}
     </Modal>
   );
+}
+
+function fmtSecs(sec: number) {
+  if (sec < 60) return `${Math.max(1, Math.round(sec))} giây`;
+  const m = Math.floor(sec / 60);
+  return m < 60 ? `${m} phút` : `${Math.floor(m / 60)} giờ ${m % 60} phút`;
+}
+
+/** "Đang ghi 12 / 626 file · 11,9 giây/file · còn khoảng 2 giờ 3 phút · file đang ghi" */
+function applyStatus(r: { done: number; total: number; started: number; current: string | null }) {
+  const parts = [`Đang ghi ${fmtN(r.done)} / ${fmtN(r.total)} file`];
+  if (r.done > 0) {
+    const per = (Date.now() - r.started) / 1000 / r.done;
+    parts.push(`${per.toLocaleString("vi-VN", { maximumFractionDigits: 1 })} giây/file`);
+    if (r.total > r.done) parts.push(`còn khoảng ${fmtSecs(per * (r.total - r.done))}`);
+  }
+  if (r.current) parts.push(r.current.split("/").pop()!);
+  return parts.join(" · ");
 }
 
 type Item = { key: string; path: string; field: string; orig: string; value: string; t: TrackRow };

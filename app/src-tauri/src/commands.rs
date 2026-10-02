@@ -158,12 +158,13 @@ struct ApplyEvent {
 }
 
 #[tauri::command]
-pub async fn apply_run(app: AppHandle, state: State<'_, AppState>, items: Vec<ApplyItem>, undo_of: Option<i64>) -> CmdResult<Report> {
+pub async fn apply_run(app: AppHandle, state: State<'_, AppState>, items: Vec<ApplyItem>, undo_of: Option<i64>, in_place: Option<bool>) -> CmdResult<Report> {
     let db = state.db.clone();
     let cancel = state.apply_cancel.clone();
     cancel.store(false, Ordering::Relaxed);
     tauri::async_runtime::spawn_blocking(move || {
-        let in_place = db.lock().unwrap().setting("write_mode").ok().flatten().as_deref() == Some("in_place");
+        // the choice made in the review dialog wins over the saved default
+        let in_place = in_place.unwrap_or_else(|| db.lock().unwrap().setting("write_mode").ok().flatten().as_deref() == Some("in_place"));
         apply::apply(&db, &items, undo_of, in_place, &cancel, &move |done, total, r| {
             let _ = app.emit("apply-progress", ApplyEvent { done, total, result: r.clone() });
         })

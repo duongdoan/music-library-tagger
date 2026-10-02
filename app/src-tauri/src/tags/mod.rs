@@ -5,6 +5,7 @@
 //! formats (WAV, AIFF, DSF, MP3) use the `id3` crate, RIFF INFO and DSF use our
 //! own small modules.
 pub mod dsf;
+pub mod flac_inplace;
 #[cfg(test)]
 pub mod payload;
 pub mod riff;
@@ -269,7 +270,9 @@ fn read_flac_fast(p: &Path) -> Result<TrackTags> {
             }
         }
         seen.dedup();
-        t.aa_mismatch = seen.len() > 1;
+        // an Album Artist only under "ALBUM ARTIST" / "ALBUM_ARTIST" lacks the standard key players read
+        let standard = multi.iter().any(|(k, v)| k == "ALBUMARTIST" && !v.trim().is_empty());
+        t.aa_mismatch = seen.len() > 1 || (!standard && seen.iter().any(|v| !v.is_empty()));
     }
     let f = &mut t.fields;
     for (field, keys) in VORBIS_KEYS {
@@ -295,7 +298,7 @@ fn read_flac_fast(p: &Path) -> Result<TrackTags> {
 }
 
 /// Vorbis comment keys per field; the first key is the one we create.
-const VORBIS_KEYS: &[(&str, &[&str])] = &[
+pub(crate) const VORBIS_KEYS: &[(&str, &[&str])] = &[
     ("title", &["TITLE"]),
     ("artist", &["ARTIST"]),
     ("album", &["ALBUM"]),
@@ -364,6 +367,15 @@ pub fn write_track(p: &Path, changes: &Fields) -> Result<()> {
         "wma" => bail!("Không hỗ trợ sửa tag WMA"),
         _ => write_generic(p, changes),
     }
+}
+
+/// Fast path for in-place writes: FLAC tags that fit the existing metadata area are
+/// written without touching the audio (a few KB instead of the whole file over SMB).
+pub fn write_track_in_place(p: &Path, changes: &Fields) -> Result<()> {
+    if ext(p) == "flac" && changes.keys().all(|k| FIELDS.contains(&k.as_str())) && flac_inplace::write(p, changes)? {
+        return Ok(());
+    }
+    write_track(p, changes)
 }
 
 fn id3_version(t: &id3::Tag) -> id3::Version {
@@ -442,9 +454,14 @@ fn write_flac(p: &Path, c: &Fields) -> Result<()> {
     let vc = ff.vorbis_comments_mut().unwrap();
     for (field, keys) in VORBIS_KEYS {
         let Some(v) = c.get(*field) else { continue };
-        // update every spelling the file already uses
-        let present: Vec<String> = vc.items().map(|(k, _)| k.to_string()).filter(|k| keys.iter().any(|x| x.eq_ignore_ascii_case(k))).collect();
-        let targets = if present.is_empty() { vec![keys[0].to_string()] } else { present };
+        // update every spelling the file already uses, and always the standard key
+        // (players such as Roon look for ALBUMARTIST, not "ALBUM ARTIST")
+        let mut targets: Vec<String> = vec![keys[0].to_string()];
+        for k in vc.items().map(|(k, _)| k.to_string()) {
+            if keys.iter().any(|x| x.eq_ignore_ascii_case(&k)) && !targets.iter().any(|t| t.eq_ignore_ascii_case(&k)) {
+                targets.push(k);
+            }
+        }
         for k in targets {
             let _ = vc.remove(&k).count();
             if !v.is_empty() {
