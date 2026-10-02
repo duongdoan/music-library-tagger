@@ -229,6 +229,7 @@ export function ReviewDialog({ onClose, undoOf }: { onClose: () => void; undoOf?
         else if (r.status !== "cancelled") store.status.set(r.path, { status: r.status, message: r.message });
       }
       store.mergeRows(rep.results.filter((r) => r.row && r.status === "ok").map((r) => r.row!), []);
+      store.flushMerge();
       store.setStaged(await api.stageList());
       store.undoStack = [];
       store.redoStack = [];

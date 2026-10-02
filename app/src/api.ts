@@ -55,6 +55,8 @@ export interface UndoPlan {
   missing: string[];
 }
 
+export interface Cover { url: string; width: number; height: number; bytes: number; source: "embedded" | "folder"; file: string | null }
+
 export const api = {
   listSources: () => invoke<Source[]>("list_sources"),
   addSource: (path: string) => invoke<Source>("add_source", { path }),
@@ -73,6 +75,7 @@ export const api = {
   undoPlan: (runId: number) => invoke<UndoPlan>("undo_plan", { runId }),
   getSetting: (key: string) => invoke<string | null>("get_setting", { key }),
   setSetting: (key: string, value: string) => invoke<void>("set_setting", { key, value }),
+  getCover: (path: string, size: number) => invoke<Cover | null>("get_cover", { path, size }),
 };
 
 export const on = {
