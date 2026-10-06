@@ -53,7 +53,7 @@ export default function App() {
   if (!sources.length)
     return (
       <div className="welcome">
-        <h1>Music Library Tagger</h1>
+        <h1>Evo Music Library Tagger</h1>
         <p>Thêm thư mục nhạc để bắt đầu. App quét tag vào chỉ mục trên máy; với ổ mạng, lần quét đầu có thể mất vài chục phút và có thể dừng rồi chạy tiếp.</p>
         <button className="btn primary big" onClick={addSource}>Thêm thư mục nhạc</button>
         <Toast />
